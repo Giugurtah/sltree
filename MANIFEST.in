@@ -1,0 +1,2 @@
+# Include C source files in source distributions (sdist)
+recursive-include csrc *.c *.h Makefile

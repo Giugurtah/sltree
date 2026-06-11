@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools >= 65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name            = "lbtree"
+version         = "0.1.0"
+description     = "Latent Budget Tree — Decision trees for categorical predictors based on Latent Budget Analysis"
+readme          = "README.md"
+requires-python = ">=3.10"
+license         = { text = "MIT" }
+
+dependencies = [
+    "numpy  >= 1.23",
+    "pandas >= 1.5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "scikit-learn"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["lbtree*"]
+
+[tool.setuptools.package-data]
+"lbtree._backend"                  = ["*.so", "*.dylib", "*.dll"]
+"lbtree._preprocessing._backend"  = ["*.so", "*.dylib", "*.dll"]
