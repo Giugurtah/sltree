@@ -2,8 +2,6 @@
 
 **SL-TREE** is a comprehensive, production-grade statistical learning ecosystem for tree-based models, implemented in Python with a parallelized C backend. It grounds recursive partitioning in Vapnik's Statistical Learning Theory, prioritising structural honesty, predictability evaluation, and intrinsic explainability over black-box empirical risk minimisation.
 
-> Buoncompagni C., Vannucci G., Siciliano R. — *SL-TREE: Grounding Tree-Based Machine Learning in Statistical Learning and Intrinsic Explainability* (submitted).
-
 ## Overview
 
 SL-TREE is organised around five technological pillars:
@@ -96,6 +94,4 @@ X_imputed = imputer.fit_transform(X_cat)
 
 ## Citation
 
-If you use SL-TREE in your research, please cite:
-
-> Buoncompagni C., Vannucci G., Siciliano R. — *SL-TREE: Grounding Tree-Based Machine Learning in Statistical Learning and Intrinsic Explainability* (submitted, 2026).
+If you use SL-TREE in your research, please cite us.
