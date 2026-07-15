@@ -38,14 +38,14 @@ On macOS these are provided by Xcode Command Line Tools (`xcode-select --install
 ## Installation
 
 ```bash
-pip install git+https://github.com/Giugurtah/lbtree.git
+pip install git+https://github.com/Giugurtah/sltree.git
 ```
 
 Or clone and install locally:
 
 ```bash
-git clone https://github.com/Giugurtah/lbtree.git
-cd lbtree
+git clone https://github.com/Giugurtah/sltree.git
+cd sltree
 pip install .
 ```
 
