@@ -33,7 +33,8 @@ SL-TREE is organised around five technological pillars:
 - `numpy ≥ 1.23`, `pandas ≥ 1.5`
 - A C compiler (`gcc` or `cc`) and `make` — used to compile the C backend at install time
 
-On macOS these are provided by Xcode Command Line Tools (`xcode-select --install`). On Linux install `build-essential` (`sudo apt install build-essential`).
+On macOS these are provided by Xcode Command Line Tools (`xcode-select --install`). 
+On Linux install `build-essential` (`sudo apt install build-essential`).
 
 ## Installation
 
