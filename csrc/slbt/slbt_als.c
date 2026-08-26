@@ -24,14 +24,6 @@
 
 //*------Internally used functions------
 //Helper functions
-void mat_print_double(int I, int J, double mat[I][J]){ //Function used to print a double matrix
-    for(int i=0; i<I; i++){
-        for(int j=0; j<J; j++){
-            printf("%f ", mat[i][j]);
-        }
-        printf("\n");
-    }   
-}
 void mat_tras_ptr(int I, int J, double** mat, double mat_res[J][I]){ //Function that given a matrix returns its transpose
     for(int i=0; i<I; i++){
         for(int j=0; j<J; j++){

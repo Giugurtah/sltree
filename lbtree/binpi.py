@@ -47,6 +47,8 @@ Available ensembles
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
 
@@ -103,6 +105,7 @@ class BINPI:
         bootstrap: bool      = True,
         learning_rate: float = 1.0,
         random_state         = None,
+        verbose: int         = 0,
         **ensemble_kwargs,
     ):
         if ensemble not in ("forest", "adaboost"):
@@ -117,6 +120,7 @@ class BINPI:
         self.bootstrap        = bootstrap
         self.learning_rate    = learning_rate
         self.random_state     = random_state
+        self.verbose       = verbose
         self.ensemble_kwargs  = ensemble_kwargs
 
         self.imputed_matrix_   : pd.DataFrame | None = None
@@ -152,7 +156,10 @@ class BINPI:
         missing_cols  = [c for c in X.columns if self.missing_counts_[c] >  0]
 
         if not missing_cols:
-            print("No missing values found. Returning original matrix.")
+            warnings.warn(
+                "BINPI: no missing values found; the input matrix is returned "
+                "unchanged.", UserWarning, stacklevel=2,
+            )
             self.imputed_matrix_ = X.copy()
             return self.imputed_matrix_
 
@@ -160,12 +167,13 @@ class BINPI:
         missing_cols_sorted    = sorted(missing_cols, key=lambda c: self.missing_counts_[c])
         self.imputation_order_ = missing_cols_sorted
 
-        print("=" * 60)
-        print(f"BINPI — incremental imputation (ensemble={self.ensemble})")
-        print(f"  Complete columns    : {len(complete_cols)}")
-        print(f"  Columns with missing: {len(missing_cols_sorted)}")
-        print(f"  Imputation order    : {missing_cols_sorted}")
-        print("=" * 60)
+        if self.verbose:
+            print("=" * 60)
+            print(f"BINPI — incremental imputation (ensemble={self.ensemble})")
+            print(f"  Complete columns    : {len(complete_cols)}")
+            print(f"  Columns with missing: {len(missing_cols_sorted)}")
+            print(f"  Imputation order    : {missing_cols_sorted}")
+            print("=" * 60)
 
         # Working copy: imputed values are added incrementally
         Z = X.copy()
@@ -175,8 +183,9 @@ class BINPI:
 
         for step, target_col in enumerate(missing_cols_sorted):
             n_missing = int(self.missing_counts_[target_col])
-            print(f"\n[Step {step + 1}/{len(missing_cols_sorted)}] "
-                  f"Target: '{target_col}'  (missing: {n_missing})")
+            if self.verbose:
+                print(f"\n[Step {step + 1}/{len(missing_cols_sorted)}] "
+                      f"Target: '{target_col}'  (missing: {n_missing})")
 
             observed_mask = Z[target_col].notna()
             missing_mask  = Z[target_col].isna()
@@ -188,7 +197,8 @@ class BINPI:
                     "Cannot train the ensemble."
                 )
 
-            print(f"  Training rows: {n_train}  |  Rows to impute: {n_missing}")
+            if self.verbose:
+                print(f"  Training rows: {n_train}  |  Rows to impute: {n_missing}")
 
             X_train  = Z.loc[observed_mask, current_predictors].reset_index(drop=True)
             y_train  = Z.loc[observed_mask, target_col].reset_index(drop=True)
@@ -208,7 +218,11 @@ class BINPI:
 
             if len(pred_complete) < len(current_predictors):
                 dropped = set(current_predictors) - set(pred_complete)
-                print(f"  [warn] Predictors excluded (still with missing): {dropped}")
+                warnings.warn(
+                    f"BINPI: predictors excluded from the model for "
+                    f"'{target_col}' because they still contain missing "
+                    f"values: {sorted(dropped)}", UserWarning, stacklevel=2,
+                )
 
             X_train  = X_train[pred_complete]
             X_impute = X_impute[pred_complete]
@@ -222,7 +236,8 @@ class BINPI:
             missing_indices = Z.index[missing_mask]
             Z.loc[missing_indices, target_col] = imputed_values
 
-            print("  Imputation completed.")
+            if self.verbose:
+                print("  Imputation completed.")
 
             # Expand predictor block
             current_predictors.append(target_col)
@@ -230,10 +245,11 @@ class BINPI:
         # Restore original column order
         self.imputed_matrix_ = Z[X.columns]
 
-        print("\n" + "=" * 60)
-        print("BINPI — imputation complete.")
-        print(f"  Residual missing: {self.imputed_matrix_.isnull().sum().sum()}")
-        print("=" * 60)
+        if self.verbose:
+            print("\n" + "=" * 60)
+            print("BINPI — imputation complete.")
+            print(f"  Residual missing: {self.imputed_matrix_.isnull().sum().sum()}")
+            print("=" * 60)
 
         return self.imputed_matrix_
 
@@ -302,6 +318,7 @@ class BINPI:
             "bootstrap":     self.bootstrap,
             "learning_rate": self.learning_rate,
             "random_state":  self.random_state,
+            "verbose":       self.verbose,
             **self.ensemble_kwargs,
         }
 

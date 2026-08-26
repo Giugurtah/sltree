@@ -38,6 +38,8 @@ SCTreeForest (Random Forest) which is more robust.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
 
@@ -87,6 +89,7 @@ class AdaBoostForest:
         max_depth: int       = 3,
         learning_rate: float = 1.0,
         random_state         = None,
+        verbose: int           = 0,
         **tree_kwargs,
     ):
         if model not in ("twoStage", "twoing", "twoClass"):
@@ -99,6 +102,7 @@ class AdaBoostForest:
         self.max_depth     = max_depth
         self.learning_rate = learning_rate
         self.random_state  = random_state
+        self.verbose       = verbose
         self.tree_kwargs   = tree_kwargs
 
         self.estimators_        : list[SCTreeWeighted] = []
@@ -146,15 +150,20 @@ class AdaBoostForest:
                     self.estimators_.append(tree)
                     self.estimator_weights_.append(1e-10)
                     self.estimator_errors_.append(err)
-                    print(f"  AdaBoost iter 1: err={err:.4f} >= 0.5, "
-                          f"saved with weight~0")
+                    warnings.warn(
+                        f"AdaBoost: the first weak learner has err={err:.4f} >= 0.5, "
+                        "no better than chance. It is kept with a negligible weight "
+                        "and boosting stops here.",
+                        UserWarning, stacklevel=2,
+                    )
                 break
 
             # ── 4. Learner weight ────────────────────────────────────
             weight = self._compute_learner_weight(err)
             weight *= self.learning_rate
 
-            if (t + 1) % 10 == 0 or t == 0 or t == self.n_estimators - 1:
+            if self.verbose and ((t + 1) % 10 == 0 or t == 0
+                                 or t == self.n_estimators - 1):
                 label = "alpha" if self.model != "twoClass" else "log(1/β)"
                 print(f"  AdaBoost iter {t + 1}/{self.n_estimators}: "
                       f"err={err:.4f}, {label}={weight:.4f}")
@@ -168,7 +177,8 @@ class AdaBoostForest:
             self.estimator_weights_.append(weight)
             self.estimator_errors_.append(err)
 
-        print(f"AdaBoost: {len(self.estimators_)} weak learners fitted.")
+        if self.verbose:
+            print(f"AdaBoost: {len(self.estimators_)} weak learners fitted.")
         return self
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
@@ -253,6 +263,7 @@ class AdaBoostForest:
             "max_depth":    self.max_depth,
             "learning_rate": self.learning_rate,
             "random_state": self.random_state,
+            "verbose":       self.verbose,
             **self.tree_kwargs,
         }
 

@@ -864,4 +864,3 @@ def plot_html(
         html      = _html_standard(tree_JSON, plot_JSON, title)
 
     Path(output_file).write_text(html, encoding="utf-8")
-    print(f"Plot saved to: {output_file}")

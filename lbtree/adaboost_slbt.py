@@ -26,6 +26,8 @@ homogeneity="AB", which is equivalent to a classic weighted LBT.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
 
@@ -68,6 +70,7 @@ class SLBTAdaBoostForest:
         max_depth: int       = 3,
         learning_rate: float = 1.0,
         random_state         = None,
+        verbose: int           = 0,
         **tree_kwargs,
     ):
         if homogeneity not in ("none", "A", "B", "AB"):
@@ -80,6 +83,7 @@ class SLBTAdaBoostForest:
         self.max_depth     = max_depth
         self.learning_rate = learning_rate
         self.random_state  = random_state
+        self.verbose       = verbose
         self.tree_kwargs   = tree_kwargs
         # Seeds the per-round generator handed to each SLBTWeighted learner.
         self._rng          = np.random.default_rng(random_state)
@@ -147,8 +151,12 @@ class SLBTAdaBoostForest:
                     self.estimators_.append(tree)
                     self.estimator_weights_.append(1e-10)
                     self.estimator_errors_.append(err)
-                    print(f"  AdaBoost-SLBT iter 1: err={err:.4f} >= 0.5, "
-                          f"saved with weight~0")
+                    warnings.warn(
+                        f"AdaBoost-SLBT: the first weak learner has err={err:.4f} >= 0.5, "
+                        "no better than chance. It is kept with a negligible weight "
+                        "and boosting stops here.",
+                        UserWarning, stacklevel=2,
+                    )
                 break
 
             # ── 4. Learner weight α_t ────────────────────────────────
@@ -156,7 +164,8 @@ class SLBTAdaBoostForest:
             alpha    = float(0.5 * np.log((1 - err_clip) / err_clip))
             alpha   *= self.learning_rate
 
-            if (t + 1) % 10 == 0 or t == 0 or t == self.n_estimators - 1:
+            if self.verbose and ((t + 1) % 10 == 0 or t == 0
+                                 or t == self.n_estimators - 1):
                 print(f"  AdaBoost-SLBT iter {t + 1}/{self.n_estimators}: "
                       f"err={err:.4f}, alpha={alpha:.4f}")
 
@@ -170,7 +179,8 @@ class SLBTAdaBoostForest:
             self.estimator_weights_.append(alpha)
             self.estimator_errors_.append(err)
 
-        print(f"AdaBoost-SLBT: {len(self.estimators_)} weak learners fitted.")
+        if self.verbose:
+            print(f"AdaBoost-SLBT: {len(self.estimators_)} weak learners fitted.")
         return self
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
@@ -218,6 +228,7 @@ class SLBTAdaBoostForest:
             "max_depth":     self.max_depth,
             "learning_rate": self.learning_rate,
             "random_state":  self.random_state,
+            "verbose":       self.verbose,
             **self.tree_kwargs,
         }
 

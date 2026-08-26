@@ -45,6 +45,8 @@ predictions.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
 from collections import Counter
@@ -103,6 +105,7 @@ class SLBTForest:
         feature_sampling: str  = "tree",
         bootstrap: bool        = True,
         random_state           = None,
+        verbose: int           = 0,
         **tree_kwargs,
     ):
         if homogeneity not in ("none", "A", "B", "AB"):
@@ -121,6 +124,7 @@ class SLBTForest:
         self.feature_sampling  = feature_sampling
         self.bootstrap         = bootstrap
         self.random_state      = random_state
+        self.verbose       = verbose
         self.tree_kwargs       = tree_kwargs
 
         self.estimators_          : list[SLBT]          = []
@@ -177,7 +181,7 @@ class SLBTForest:
         oob_preds = [[] for _ in range(n_samples)]
 
         for b in range(self.n_estimators):
-            if (b + 1) % 10 == 0 or b == 0:
+            if self.verbose and ((b + 1) % 10 == 0 or b == 0):
                 print(f"  SLBTForest: {b + 1}/{self.n_estimators} trees fitted")
 
             # 1. Bootstrap row sampling
@@ -235,7 +239,8 @@ class SLBTForest:
         # 5. OOB score
         if self.bootstrap:
             self.oob_score_ = self._compute_oob_score(y, oob_preds)
-            print(f"\nOOB Score: {self.oob_score_:.4f}")
+            if self.verbose:
+                print(f"\nOOB Score: {self.oob_score_:.4f}")
 
         # 6. PPI importance
         self.ppi_importance_ = self._compute_ppi_importance(all_columns)
@@ -288,6 +293,7 @@ class SLBTForest:
             "feature_sampling": self.feature_sampling,
             "bootstrap":       self.bootstrap,
             "random_state":    self.random_state,
+            "verbose":       self.verbose,
             **self.tree_kwargs,
         }
 

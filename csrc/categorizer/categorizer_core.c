@@ -78,8 +78,6 @@ int categorize_kmeans_elbow(int I, int Kmax, int Kmin, int minN,
     // Find optimal K using elbow method
     int optimal_k = kmeans_elbow(I, Kmax, Kmin, minN, X, labels_temp1, labels_temp2, &rng);
     
-    printf("Optimal K found: %d\n", optimal_k);
-    
     // Run KMeans one final time with optimal K
     kmeans_execute(I, optimal_k, X, labels, 1.0, &rng);
     
@@ -126,8 +124,6 @@ int categorize_kmeans_silhouette(int I, int Kmax, int Kmin, int minN,
     
     // Find optimal K using silhouette method
     int optimal_k = kmeans_silhouette(I, Kmax, Kmin, minN, X, labels_temp1, labels_temp2, &rng);
-    
-    printf("Optimal K found: %d\n", optimal_k);
     
     // Produce the final labelling with the chosen K. The temporary buffers
     // hold clusterings for whichever K happened to be tested last, not for

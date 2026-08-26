@@ -12,7 +12,6 @@
 // csrc/categorizer/kmeans_metrics.c
 
 #include "kmeans.h"
-#include <stdio.h>
 
 int kmeans_elbow(int I, int Kmax, int Kmin, int minN, double X[], 
                  int labels_temp1[], int labels_temp2[], lb_rng_t *rng) {
@@ -28,14 +27,10 @@ int kmeans_elbow(int I, int Kmax, int Kmin, int minN, double X[],
     // Calculate slope threshold
     double m = (ssq[Kmax - 1] - ssq[0]) / (Kmax - 1);
     
-    printf("Slope threshold m: %f\n", m);
-    
     current_k = 2;
     
     // Test each K from 2 to Kmax
     while (current_k <= Kmax) {
-        printf("Testing K=%d ", current_k);
-        
         if (alt == 0) {
             ssq[current_k - 1] = kmeans_execute(I, current_k, X, labels_temp2, 1.0, rng);
             check = check_cluster_sizes(I, current_k, minN, labels_temp2);
@@ -74,13 +69,9 @@ int kmeans_silhouette(int I, int Kmax, int Kmin, int minN, double X[],
     
     // Test each K from 2 to Kmax
     while (current_k <= Kmax && check == 0) {
-        printf("Testing K=%d ", current_k);
-        
         if (alt == 0) {
             silhouette_score = kmeans_execute(I, current_k, X, labels_temp2, 2.0, rng);
             check = check_cluster_sizes(I, current_k, minN, labels_temp2);
-            
-            printf("silhouette score: %f\n", silhouette_score);
             
             if (silhouette_score > highest_silhouette && current_k >= Kmin) {
                 highest_silhouette = silhouette_score;
@@ -90,8 +81,6 @@ int kmeans_silhouette(int I, int Kmax, int Kmin, int minN, double X[],
         } else {
             silhouette_score = kmeans_execute(I, current_k, X, labels_temp1, 2.0, rng);
             check = check_cluster_sizes(I, current_k, minN, labels_temp1);
-            
-            printf("silhouette score: %f\n", silhouette_score);
             
             if (silhouette_score > highest_silhouette && current_k >= Kmin) {
                 highest_silhouette = silhouette_score;
