@@ -128,7 +128,6 @@ class SCTree(BaseLBTree):
 
         self.root = self._grow_tree(X, y)
         self._calculate_tree_partial_impurity_reduction()
-        self._calculate_tree_partial_tau_reduction()
         return self
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
@@ -204,7 +203,6 @@ class SCTree(BaseLBTree):
         root_N: int           = 1,
         depth: int            = 0,
         pos: int              = 1,
-        parent_cum_tau: float = 0.0,
     ) -> Node:
 
         X = self._drop_constant_columns(X)
@@ -240,9 +238,6 @@ class SCTree(BaseLBTree):
             )
             tree_partial_impurity_reduction = 0.0
 
-        # cumulative_path_tau: tau accumulated along the path from root to here
-        cumulative_path_tau = parent_cum_tau
-
         # y_numeric carries the original numeric values for twoClass so that
         # leaf nodes store mean(y_original) as their regression prediction.
         y_numeric = y_original if self.model == "twoClass" else None
@@ -253,7 +248,6 @@ class SCTree(BaseLBTree):
             n_labels, n_samples, n_feats,
             impurity_decrease, tree_partial_impurity_reduction,
             y_numeric=y_numeric,
-            parent_cum_tau=cumulative_path_tau,
         )
         if leaf is not None:
             return leaf
@@ -278,13 +272,9 @@ class SCTree(BaseLBTree):
             best_gpi, best_pi,
             impurity_decrease, tree_partial_impurity_reduction,
             y_numeric=y_numeric,
-            parent_cum_tau=cumulative_path_tau,
         )
         if leaf is not None:
             return leaf
-
-        # Δτ of this split: PPI × (1 − impurity_decrease) = (I_t − I_L − I_R) / I_root
-        tau_decrease = best_pi * (1.0 - impurity_decrease)
 
         # --- split ---
         threshold_labels = np.unique(X[best_feature])[np.array(best_treshold) > 0]
@@ -292,13 +282,10 @@ class SCTree(BaseLBTree):
 
         # Pass y_original to children so each node re-binarizes on its own
         # local distribution (twoClass). For other models y_original == y.
-        child_cum_tau = cumulative_path_tau + tau_decrease
         left  = self._grow_tree(X.loc[indexL], y_original[indexL],
-                                root_impurity, root_N, depth + 1, 2 * pos,
-                                parent_cum_tau=child_cum_tau)
+                                root_impurity, root_N, depth + 1, 2 * pos)
         right = self._grow_tree(X.loc[indexR], y_original[indexR],
-                                root_impurity, root_N, depth + 1, 2 * pos + 1,
-                                parent_cum_tau=child_cum_tau)
+                                root_impurity, root_N, depth + 1, 2 * pos + 1)
 
         node = Node(
             gpi=best_gpi, pi=best_pi, position=pos,
@@ -307,9 +294,6 @@ class SCTree(BaseLBTree):
             impurity=impurity,
             impurity_decrease=impurity_decrease,
             tree_partial_impurity_reduction=tree_partial_impurity_reduction,
-            tau_decrease=tau_decrease,
-            cumulative_path_tau=cumulative_path_tau,
-            tree_partial_tau_reduction=0.0,
             distribution=distribution, N=len(y), labels=np.unique(y),
             GCR=None,
             y_stats=node_y_stats,
@@ -354,7 +338,6 @@ class SCTree(BaseLBTree):
         n_labels, n_samples, n_feats,
         impurity_decrease, tree_partial_impurity_reduction,
         y_numeric=None,
-        parent_cum_tau=0.0,
     ):
         if (depth >= self.max_depth
                 or n_labels == 1
@@ -365,7 +348,6 @@ class SCTree(BaseLBTree):
                 y, pos, impurity, distribution,
                 impurity_decrease, tree_partial_impurity_reduction,
                 y_numeric=y_numeric,
-                parent_cum_tau=parent_cum_tau,
             )
         return None
 
@@ -374,14 +356,12 @@ class SCTree(BaseLBTree):
         best_gpi, best_pi,
         impurity_decrease, tree_partial_impurity_reduction,
         y_numeric=None,
-        parent_cum_tau=0.0,
     ):
         if best_gpi < self.min_gpi or best_pi < self.min_ppi or best_pi < 1e-8:
             return self._make_leaf(
                 y, pos, impurity, distribution,
                 impurity_decrease, tree_partial_impurity_reduction,
                 y_numeric=y_numeric,
-                parent_cum_tau=parent_cum_tau,
             )
         return None
 
@@ -389,7 +369,6 @@ class SCTree(BaseLBTree):
         self, y, pos, impurity, distribution,
         impurity_decrease, tree_partial_impurity_reduction,
         y_numeric=None,
-        parent_cum_tau=0.0,
     ) -> Node:
         # twoClass: leaf prediction is the mean of the original numeric target
         # (regression output). For all other models it is the majority class.
@@ -408,9 +387,6 @@ class SCTree(BaseLBTree):
             impurity=impurity,
             impurity_decrease=impurity_decrease,
             tree_partial_impurity_reduction=tree_partial_impurity_reduction,
-            tau_decrease=0.0,
-            cumulative_path_tau=parent_cum_tau,
-            tree_partial_tau_reduction=0.0,
             distribution=distribution,
             N=len(y),
             labels=np.unique(y),
@@ -552,45 +528,6 @@ class SCTree(BaseLBTree):
             else:
                 current.tree_partial_impurity_reduction = part_imp_red
 
-    def _calculate_tree_partial_tau_reduction(self):
-        """
-        Post-fit: assign tree_partial_tau_reduction to every node.
-
-        Nodes are expanded in order of cumulative_path_tau (ascending),
-        i.e. top-down along the most-tau-contributing paths first.
-        At each expansion step the global tree tau increases by tau_decrease
-        of the expanded node (Δτ = PPI × (1 − impurity_decrease)).
-        """
-        if self.root is None:
-            return
-        all_nodes = []
-        self._collect_nodes(self.root, all_nodes)
-        all_nodes.sort(key=lambda n: n.cumulative_path_tau if n.cumulative_path_tau is not None else 0.0)
-        self._bubble_sort_tau_nodes(all_nodes)
-
-        self.root.tree_partial_tau_reduction = 0.0
-        part_tau           = 0.0
-        previous_part_tau  = 0.0
-        search             = True
-        virtual_leaves     = [self.root.left, self.root.right]
-        virtual_leaves_set = {self.root.left, self.root.right}
-
-        for current in all_nodes[1:]:
-            if current in virtual_leaves_set and not current._is_leaf_node():
-                virtual_leaves.remove(current)
-                virtual_leaves_set.discard(current)
-                virtual_leaves.append(current.left)
-                virtual_leaves_set.add(current.left)
-                virtual_leaves.append(current.right)
-                virtual_leaves_set.add(current.right)
-                part_tau += current.tau_decrease
-                if part_tau - previous_part_tau < 0.01 and search:
-                    current.suggested_pruning = True
-                    search = False
-                current.tree_partial_tau_reduction = part_tau
-                previous_part_tau = part_tau
-            else:
-                current.tree_partial_tau_reduction = part_tau
 
     @staticmethod
     def _bubble_sort_nodes(nodes):
@@ -600,17 +537,6 @@ class SCTree(BaseLBTree):
             iteration += 1
             for i in range(len(nodes) - 1):
                 if nodes[i].impurity_decrease > nodes[i + 1].impurity_decrease:
-                    nodes[i], nodes[i + 1] = nodes[i + 1], nodes[i]
-                    changed = True
-
-    @staticmethod
-    def _bubble_sort_tau_nodes(nodes):
-        changed, max_iter, iteration = True, len(nodes) * 2, 0
-        while changed and iteration < max_iter:
-            changed   = False
-            iteration += 1
-            for i in range(len(nodes) - 1):
-                if (nodes[i].cumulative_path_tau or 0.0) > (nodes[i + 1].cumulative_path_tau or 0.0):
                     nodes[i], nodes[i + 1] = nodes[i + 1], nodes[i]
                     changed = True
 

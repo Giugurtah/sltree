@@ -45,9 +45,6 @@ class NodeRecord:
     gcr: Any                 # None or list of floats
     lift_left: Any           # None (SCTree) or list/nested list (SLBT)
     lift_right: Any
-    tau_decrease: Optional[float]
-    cumulative_path_tau: Optional[float]
-    tree_partial_tau_reduction: Optional[float]
 
 
 class TreeReporter:
@@ -79,7 +76,6 @@ class TreeReporter:
                 "id", "node_type", "feature", "threshold", "N",
                 "impurity", "distribution", "labels",
                 "gpi", "pi", "gcr", "lift_left", "lift_right",
-                "tau_decrease", "cumulative_path_tau", "tree_partial_tau_reduction",
             ])
         return pd.DataFrame(asdict(r) for r in self._records)
 
@@ -123,9 +119,6 @@ class TreeReporter:
             gcr         = gcr,
             lift_left   = lift_left,
             lift_right  = lift_right,
-            tau_decrease               = float(node.tau_decrease)               if node.tau_decrease               is not None else None,
-            cumulative_path_tau        = float(node.cumulative_path_tau)        if node.cumulative_path_tau        is not None else None,
-            tree_partial_tau_reduction = float(node.tree_partial_tau_reduction) if node.tree_partial_tau_reduction is not None else None,
         )
         self._records.append(rec)
 
