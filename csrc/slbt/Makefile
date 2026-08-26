@@ -6,7 +6,7 @@
 #   make clean    → remove build artefacts
 
 CC      = gcc
-CFLAGS  = -fPIC -shared -O3 -Wall -Wextra
+CFLAGS  = -fPIC -shared -O3 -Wall -Wextra -I../common
 LDFLAGS = -lm
 SOURCES = slbt_core.c slbt_als.c linalg.c
 INSTALL_DIR = ../../lbtree/_backend
@@ -27,7 +27,7 @@ endif
 
 all: $(LIB)
 
-$(LIB): $(SOURCES) slbt.h slbt_als.h linalg.h
+$(LIB): $(SOURCES) slbt.h slbt_als.h linalg.h ../common/lbrandom.h
 	$(CC) $(CFLAGS) -o $@ $(SOURCES) $(LDFLAGS)
 	@echo "✓  Built $(LIB)"
 

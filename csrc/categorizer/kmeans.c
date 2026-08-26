@@ -17,7 +17,8 @@
 
 #define MAX_ITER 1000
 
-double kmeans_execute(int I, int K, double X[], int labels[], double metric) {
+double kmeans_execute(int I, int K, double X[], int labels[], double metric,
+                      lb_rng_t *rng) {
     double centers[K], new_centers[K];
     double min_dist, dist;
     int count[K];
@@ -25,7 +26,7 @@ double kmeans_execute(int I, int K, double X[], int labels[], double metric) {
     int counter = 0;
 
     // Centroids initialization (calls a function in /kmean_init.c)
-    kplusplus_init(K, centers, I, X);
+    kplusplus_init(K, centers, I, X, rng);
     
     for (int c = 0; c < K; c++) {
         new_centers[c] = 0.0;

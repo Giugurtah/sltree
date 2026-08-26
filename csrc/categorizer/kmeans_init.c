@@ -12,23 +12,16 @@
 // csrc/categorizer/kmeans_init.c
 #include "kmeans.h"
 #include <stdlib.h>
-#include <time.h>
 #include <float.h>
 #include <math.h>
 
-void kplusplus_init(int K, double clusters[], int I, double X[]) {
+void kplusplus_init(int K, double clusters[], int I, double X[], lb_rng_t *rng) {
     double sum, dist, dist_min;
     double distances[I];
 
-    // Random seed initialization
-    static int seeded = 0;
-    if (!seeded) {
-        srand(time(NULL));
-        seeded = 1;
-    }
-
-    // Firs randomly selected centroid
-    clusters[0] = X[rand() % I];
+    // First randomly selected centroid. The generator is supplied by the
+    // caller: no global state, so the result depends only on the seed.
+    clusters[0] = X[lb_rng_below(rng, (uint64_t)I)];
 
     // For cylce for the remaining K-1 centroids
     for (int k = 1; k < K; k++) {
@@ -49,7 +42,7 @@ void kplusplus_init(int K, double clusters[], int I, double X[]) {
         }
 
         // Proportional selection
-        double r = ((double)rand() / RAND_MAX) * sum;
+        double r = lb_rng_double(rng) * sum;
         double cumulative = 0.0;
         
         for (int i = 0; i < I; i++) {

@@ -9,6 +9,8 @@
  * See the LICENSE file, or <https://www.gnu.org/licenses/>.
  */
 
+#include "lbrandom.h"
+
 double gpi_c(int I, int J, const double *F);
 void slba_c(
     int K, int KA, int KB, int I, int J,
@@ -19,7 +21,8 @@ void slba_c(
     double *out_pi,      //1
     double *out_S,        //KA*I
     double *out_alpha,    //KA*I*2
-    double *out_beta      //KB*J*2
+    double *out_beta,     //KB*J*2
+    uint64_t seed         //seeds the ALS random initialisation
 );
 
 

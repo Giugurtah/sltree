@@ -196,7 +196,15 @@ class SLBTForest:
                 X_boot     = X.iloc[boot_idx][feat_names].reset_index(drop=True)
                 y_boot     = y.iloc[boot_idx].reset_index(drop=True)
                 xs_boot    = x_s_arr[boot_idx]
-                tree       = SLBT(homogeneity=self.homogeneity, **self.tree_kwargs)
+                # Every tree gets its own generator derived from the forest
+                # seed: without it the ALS initialisation inside SLBT would be
+                # unseeded and the forest irreproducible.
+                tree_rng   = np.random.default_rng(int(self._rng.integers(0, 2 ** 31)))
+                tree       = SLBT(
+                    homogeneity=self.homogeneity,
+                    rng=tree_rng,
+                    **self.tree_kwargs,
+                )
             else:
                 # True RF: all columns reach the tree; each node subsamples independently
                 feat_names = list(X.columns)

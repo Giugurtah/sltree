@@ -12,6 +12,8 @@
 #ifndef SLBT_ALS_H
 #define SLBT_ALS_H
 
+#include "lbrandom.h"
+
 void slba_C_execute(
     int I,
     int J,
@@ -20,7 +22,8 @@ void slba_C_execute(
     int KB,
     const double *Fs,
     double *out_alpha,
-    double *out_beta
+    double *out_beta,
+    uint64_t seed        /* seeds the ALS random initialisation */
 );
 
 #endif

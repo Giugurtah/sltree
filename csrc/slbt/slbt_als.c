@@ -61,10 +61,13 @@ void prod_matrix_ptr(int I, int J, int Z, double** mat1, double mat2[J][Z], doub
         }
     }
 }
-void mat_rand(int I, int J, double mat[I][J]){ //Function to randomly generate a double matrix
+void mat_rand(int I, int J, double mat[I][J], lb_rng_t *rng){ //Function to randomly generate a double matrix
+    // The generator is supplied by the caller (see csrc/common/lbrandom.h).
+    // Using libc rand() here made the ALS start from a different point on
+    // every run, so SLBT trees were not reproducible.
     for (int i=0; i<I; i++){
         for (int j=0; j<J; j++){
-            mat[i][j] = ((double)rand()/RAND_MAX);
+            mat[i][j] = lb_rng_double(rng);
         }
     }
 }
@@ -210,7 +213,9 @@ void DX_calc(int I, int J, double mat1[I][J], double mat2[J][J]){ //Given the tr
 
 //*------Out-called from slbt_core.c------
 //Unconstrained Simultaneous Latent Budget Analysis
-void slba_C_execute(int I, int J, int T, int TA, int TB, const double *Fs, double *alpha_out, double *beta_out){ //Unconstrained Simultaneous Latent Budget Analysis 
+void slba_C_execute(int I, int J, int T, int TA, int TB, const double *Fs, double *alpha_out, double *beta_out, uint64_t seed){ //Unconstrained Simultaneous Latent Budget Analysis 
+    lb_rng_t rng;
+    lb_rng_seed(&rng, seed);
     int K = 2,  iter_count=0, MAX_ITER = 1000, stop=0, ta, tb;
     double r = 0.5, d_stop = 0.0004, f_stop=0.05, sum;
     double rA = r / (TA == 1 ? T : 1);
@@ -228,11 +233,11 @@ void slba_C_execute(int I, int J, int T, int TA, int TB, const double *Fs, doubl
 
     // Initialization of U and Z, consequently of A and B
     for(int t=0; t<TA; t++){
-        mat_rand(I, K, U[t]);
+        mat_rand(I, K, U[t], &rng);
         check_UZ(I, K, U[t]);
     }
     for(int t=0; t<TB; t++){
-        mat_rand(J, K, Z[t]);
+        mat_rand(J, K, Z[t], &rng);
         check_UZ(J, K, Z[t]);
     }
 

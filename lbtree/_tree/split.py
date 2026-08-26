@@ -13,7 +13,7 @@ lbtree/_tree/split.py
 Splitting functions for SCTree and SLBT.
 
 score_sctree()  — call the C SCTree backend (twoStage / twoing)
-score_slbt()    — call the C SLBT backend (slba)
+score_slbt()    — call the C SLBT backend (slba); takes an explicit seed
 _split()        — partition a column into left/right boolean masks
 _splitS()       — stratified partition (SLBT)
 """
@@ -100,7 +100,8 @@ _HOMOGENEITY_MAP = {
 }
 
 
-def score_slbt(Fs_noN: np.ndarray, Fs: np.ndarray, homogeneity: str = "none"):
+def score_slbt(Fs_noN: np.ndarray, Fs: np.ndarray, homogeneity: str = "none",
+               seed: int = 0):
     """
     Call the C SLBT splitting algorithm (slba).
 
@@ -109,6 +110,7 @@ def score_slbt(Fs_noN: np.ndarray, Fs: np.ndarray, homogeneity: str = "none"):
     Fs_noN     : np.ndarray, shape (K, I, J) — raw joint frequencies (not normalised)
     Fs         : np.ndarray, shape (K, I, J) — row-conditional stratified frequencies
     homogeneity : str — "none" | "A" | "B" | "AB"
+    seed        : int — 64-bit seed for the ALS random initialisation
 
     Returns
     -------
@@ -130,7 +132,7 @@ def score_slbt(Fs_noN: np.ndarray, Fs: np.ndarray, homogeneity: str = "none"):
     FsNoN_flat = Fs_noN.ravel().astype(np.float64)
     Fs_flat    = Fs.ravel().astype(np.float64)
 
-    return slba(K, KA, KB, I, J, FsNoN_flat, Fs_flat)
+    return slba(K, KA, KB, I, J, FsNoN_flat, Fs_flat, seed)
 
 
 # ============================================================

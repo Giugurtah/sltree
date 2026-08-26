@@ -58,6 +58,16 @@ class Categorizer:
         Custom category labels (e.g. ["low", "medium", "high"]).
         When provided, takes priority over ``label_style``.
         If None, labels are generated according to ``label_style``.
+    random_state : int or None, default None
+        Seed for the k-means++ centroid initialisation.  The underlying
+        k-means starts from randomly chosen centroids, so different runs on
+        the same data can produce slightly different bins.  Pass an integer
+        to make the discretisation exactly reproducible; leave it as None to
+        draw fresh entropy at every ``fit``, as scikit-learn does.
+
+        Each column receives its own seed, derived deterministically from
+        ``random_state``, so columns are clustered independently but the
+        whole result is reproducible.
     label_style : {"int", "interval"}, default "int"
         Controls how bin labels are generated when ``labels`` is None.
         ``"int"``      — integer indices (0, 1, 2, …).
@@ -96,6 +106,7 @@ class Categorizer:
         min_size: int               = 1,
         labels: Optional[List[str]] = None,
         label_style: str            = "int",
+        random_state: Optional[int] = None,
     ):
         if method not in ("fixed", "elbow", "silhouette"):
             raise ValueError(
@@ -115,8 +126,9 @@ class Categorizer:
         self.k_max       = k_max
         self.k_min       = k_min
         self.min_size    = min_size
-        self.labels      = labels
-        self.label_style = label_style
+        self.labels       = labels
+        self.label_style  = label_style
+        self.random_state = random_state
 
         self.bins_    : Dict[str, np.ndarray] = {}
         self.labels_  : Dict[str, list]       = {}
@@ -143,8 +155,15 @@ class Categorizer:
         """
         X_df = self._validate_input(X)
         self.columns_ = X_df.columns.tolist()
-        for col in self.columns_:
-            self._fit_column(col, X_df[col].values)
+
+        # One independent-but-reproducible seed per column. With
+        # random_state=None a fresh entropy draw is used, matching the
+        # scikit-learn convention.
+        rng   = np.random.default_rng(self.random_state)
+        seeds = rng.integers(0, 2 ** 63, size=len(self.columns_), dtype=np.uint64)
+
+        for col, seed in zip(self.columns_, seeds):
+            self._fit_column(col, X_df[col].values, int(seed))
         return self
 
     def transform(
@@ -187,8 +206,9 @@ class Categorizer:
             "k_max":       self.k_max,
             "k_min":       self.k_min,
             "min_size":    self.min_size,
-            "labels":      self.labels,
-            "label_style": self.label_style,
+            "labels":       self.labels,
+            "label_style":  self.label_style,
+            "random_state": self.random_state,
         }
 
     def set_params(self, **params) -> "Categorizer":
@@ -230,7 +250,7 @@ class Categorizer:
     #  PRIVATE — column-level helpers
     # ================================================================
 
-    def _fit_column(self, column: str, X: np.ndarray) -> None:
+    def _fit_column(self, column: str, X: np.ndarray, seed: int = 0) -> None:
         X_clean = X[~np.isnan(X)]
         if len(X_clean) == 0:
             warnings.warn(f"Column '{column}' contains only NaN values.")
@@ -243,15 +263,15 @@ class Categorizer:
         X_sorted = np.sort(X_clean)
 
         if self.method == "fixed":
-            cluster_labels, centers = categorize_fixed_k(X_sorted, self.k)
+            cluster_labels, centers = categorize_fixed_k(X_sorted, self.k, seed)
             k_opt = self.k
         elif self.method == "elbow":
             cluster_labels, centers, k_opt = categorize_elbow(
-                X_sorted, self.k_max, self.k_min, self.min_size
+                X_sorted, self.k_max, self.k_min, self.min_size, seed
             )
         else:  # silhouette
             cluster_labels, centers, k_opt = categorize_silhouette(
-                X_sorted, self.k_max, self.k_min, self.min_size
+                X_sorted, self.k_max, self.k_min, self.min_size, seed
             )
 
         self.k_[column]       = k_opt

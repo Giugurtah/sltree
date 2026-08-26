@@ -81,6 +81,8 @@ class SLBTAdaBoostForest:
         self.learning_rate = learning_rate
         self.random_state  = random_state
         self.tree_kwargs   = tree_kwargs
+        # Seeds the per-round generator handed to each SLBTWeighted learner.
+        self._rng          = np.random.default_rng(random_state)
 
         self.estimators_        : list[SLBTWeighted] = []
         self.estimator_weights_ : list[float]        = []
@@ -122,9 +124,12 @@ class SLBTAdaBoostForest:
 
         for t in range(self.n_estimators):
             # ── 1. Fit weak learner ──────────────────────────────────
+            # Own generator per boosting round, derived from the ensemble
+            # seed, so the ALS initialisation inside SLBTWeighted is seeded.
             tree = SLBTWeighted(
                 homogeneity=self.homogeneity,
                 max_depth=self.max_depth,
+                rng=np.random.default_rng(int(self._rng.integers(0, 2 ** 31))),
                 **self.tree_kwargs,
             )
             tree.fit(X, y, x_s=x_s, sample_weight=sample_weight)

@@ -15,7 +15,7 @@ ctypes interface for libslbt — the SLBT (Simultaneous Latent Budget Tree) C ba
 Exposed functions
 -----------------
 gpi(K, I, J, Fs_flat)                              → float
-slba(K, KA, KB, I, J, FsNoN_flat, Fs_flat)         → (pi, S, alpha, beta)
+slba(K, KA, KB, I, J, FsNoN_flat, Fs_flat, seed)   → (pi, S, alpha, beta)
 
 The shared library (libslbt.so / .dylib / .dll) must have been
 compiled from csrc/slbt/ and copied into this directory.
@@ -53,6 +53,7 @@ def _find_lib() -> Path:
 _lib = ctypes.CDLL(str(_find_lib()))
 
 c_int    = ctypes.c_int
+c_uint64 = ctypes.c_uint64
 c_double = ctypes.c_double
 p_double = ctypes.POINTER(c_double)
 
@@ -94,6 +95,7 @@ _lib.slba_c.argtypes = [
     p_double,                 # out_S   (KA*I)
     p_double,                 # out_alpha (KA*I*2)
     p_double,                 # out_beta  (KB*J*2)
+    c_uint64,                 # seed for the ALS initialisation
 ]
 _lib.slba_c.restype = None
 
@@ -103,6 +105,7 @@ def slba(
     I: int, J: int,
     FsNoN_flat: np.ndarray,
     Fs_flat: np.ndarray,
+    seed: int = 0,
 ):
     """
     Simultaneous Latent Budget Analysis split.
@@ -113,6 +116,9 @@ def slba(
     I, J        : predictor modalities, target classes
     FsNoN_flat  : raw joint frequencies (not normalised), shape (K*I*J,)
     Fs_flat     : row-conditional stratified array, shape (K*I*J,)
+    seed        : 64-bit seed for the ALS random initialisation.  The ALS
+                  starts from random matrices U and Z, so the same data with
+                  a different seed can converge to a different local optimum.
 
     Returns
     -------
@@ -134,6 +140,7 @@ def slba(
         out_S.ctypes.data_as(p_double),
         out_alpha.ctypes.data_as(p_double),
         out_beta.ctypes.data_as(p_double),
+        c_uint64(seed & 0xFFFFFFFFFFFFFFFF),
     )
 
     return (

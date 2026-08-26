@@ -155,7 +155,8 @@ double gpi_c(int K, int I, int J, const double *Fs){ //Given F this function ret
 // Out-called from slbt/_tree/split.py
 void slba_c(int K, int KA, int KB, int I, int J, // Input sizes
     const double *Fs_noN, const double *Fs, // Input matrices
-    double *out_pi, double *out_S, double *out_alpha, double *out_beta // Outputs
+    double *out_pi, double *out_S, double *out_alpha, double *out_beta, // Outputs
+    uint64_t seed // Seeds the ALS random initialisation
     ){ //Given F this function returns the split none
     // Algo variables
     double parent_tau;
@@ -181,7 +182,7 @@ void slba_c(int K, int KA, int KB, int I, int J, // Input sizes
     parent_tau = gpi_c(K ,I ,J ,Fs_noN);
 
     // LBA is executed
-    slba_C_execute(I, J, K, KA, KB, Fs, out_alpha, out_beta);
+    slba_C_execute(I, J, K, KA, KB, Fs, out_alpha, out_beta, seed);
     
     // Eval S and S_Negative based on the LBA results
     for(int t=0; t<KA; t++){

@@ -14,6 +14,8 @@
 #ifndef KMEANS_H
 #define KMEANS_H
 
+#include "lbrandom.h"
+
 // ============================================================================
 // CORE KMEANS
 // ============================================================================
@@ -31,7 +33,8 @@
  *                  - 3.0: Sequential (threshold-based)
  * @return          Computed metric value
  */
-double kmeans_execute(int I, int K, double X[], int labels[], double metric);
+double kmeans_execute(int I, int K, double X[], int labels[], double metric,
+                      lb_rng_t *rng);
 
 // ============================================================================
 // INITIALIZATION
@@ -44,8 +47,9 @@ double kmeans_execute(int I, int K, double X[], int labels[], double metric);
  * @param clusters  Output: centroid array (K elements)
  * @param I         Number of samples
  * @param X         Data array (I elements)
+ * @param rng       Explicitly-seeded generator (see lbrandom.h)
  */
-void kplusplus_init(int K, double clusters[], int I, double X[]);
+void kplusplus_init(int K, double clusters[], int I, double X[], lb_rng_t *rng);
 
 // ============================================================================
 // METRICS & UTILITIES
@@ -79,7 +83,7 @@ int check_cluster_sizes(int I, int K, int minN, int labels[]);
  * @return              Optimal K found
  */
 int kmeans_elbow(int I, int Kmax, int Kmin, int minN, double X[], 
-                 int labels_temp1[], int labels_temp2[]);
+                 int labels_temp1[], int labels_temp2[], lb_rng_t *rng);
 
 /**
  * Find optimal K using silhouette method.
@@ -91,10 +95,12 @@ int kmeans_elbow(int I, int Kmax, int Kmin, int minN, double X[],
  * @param X             Data array (I elements)
  * @param labels_temp1  Temporary buffer for labels (I elements)
  * @param labels_temp2  Temporary buffer for labels (I elements)
- * @return              Optimal K (integer) + buffer indicator (0.0 or 0.5)
+ * @return              Optimal K.  The temporary buffers are scratch space and
+ *                      do NOT hold a labelling for this K: the caller must
+ *                      re-run kmeans_execute() with the returned K.
  */
-double kmeans_silhouette(int I, int Kmax, int Kmin, int minN, double X[], 
-                         int labels_temp1[], int labels_temp2[]);
+int kmeans_silhouette(int I, int Kmax, int Kmin, int minN, double X[], 
+                      int labels_temp1[], int labels_temp2[], lb_rng_t *rng);
 
 // ============================================================================
 // PYTHON INTERFACE (categorizer_core.c)
@@ -103,21 +109,21 @@ double kmeans_silhouette(int I, int Kmax, int Kmin, int minN, double X[],
 /**
  * Categorize data using KMeans with fixed K.
  */
-void categorize_kmeans(int I, int K, double X[], int labels[]);
+void categorize_kmeans(int I, int K, double X[], int labels[], uint64_t seed);
 
 /**
  * Categorize data using KMeans with automatic K (elbow method).
  * @return Optimal K found
  */
 int categorize_kmeans_elbow(int I, int Kmax, int Kmin, int minN, 
-                             double X[], int labels[]);
+                             double X[], int labels[], uint64_t seed);
 
 /**
  * Categorize data using KMeans with automatic K (silhouette method).
  * @return Optimal K found
  */
 int categorize_kmeans_silhouette(int I, int Kmax, int Kmin, int minN, 
-                                  double X[], int labels[]);
+                                  double X[], int labels[], uint64_t seed);
 
 /**
  * Get cluster centers for a given clustering.

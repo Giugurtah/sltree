@@ -31,10 +31,14 @@
  * @param K         Number of clusters
  * @param X         Input data array (I elements)
  * @param labels    Output labels array (I elements)
+ * @param seed      Seed for the k-means++ initialisation. The same seed on
+ *                  the same data always yields the same labelling.
  */
-void categorize_kmeans(int I, int K, double X[], int labels[]) {
+void categorize_kmeans(int I, int K, double X[], int labels[], uint64_t seed) {
+    lb_rng_t rng;
+    lb_rng_seed(&rng, seed);
     // Simply run KMeans and ignore the metric return value
-    kmeans_execute(I, K, X, labels, 1.0);
+    kmeans_execute(I, K, X, labels, 1.0, &rng);
 }
 
 // ============================================================================
@@ -56,7 +60,10 @@ void categorize_kmeans(int I, int K, double X[], int labels[]) {
  * @return          Optimal K found
  */
 int categorize_kmeans_elbow(int I, int Kmax, int Kmin, int minN, 
-                             double X[], int labels[]) {
+                             double X[], int labels[], uint64_t seed) {
+    lb_rng_t rng;
+    lb_rng_seed(&rng, seed);
+
     // Allocate temporary buffers for labels during K search
     int *labels_temp1 = (int*)malloc(I * sizeof(int));
     int *labels_temp2 = (int*)malloc(I * sizeof(int));
@@ -69,12 +76,12 @@ int categorize_kmeans_elbow(int I, int Kmax, int Kmin, int minN,
     }
     
     // Find optimal K using elbow method
-    int optimal_k = kmeans_elbow(I, Kmax, Kmin, minN, X, labels_temp1, labels_temp2);
+    int optimal_k = kmeans_elbow(I, Kmax, Kmin, minN, X, labels_temp1, labels_temp2, &rng);
     
     printf("Optimal K found: %d\n", optimal_k);
     
     // Run KMeans one final time with optimal K
-    kmeans_execute(I, optimal_k, X, labels, 1.0);
+    kmeans_execute(I, optimal_k, X, labels, 1.0, &rng);
     
     // Clean up
     free(labels_temp1);
@@ -102,7 +109,10 @@ int categorize_kmeans_elbow(int I, int Kmax, int Kmin, int minN,
  * @return          Optimal K found
  */
 int categorize_kmeans_silhouette(int I, int Kmax, int Kmin, int minN, 
-                                  double X[], int labels[]) {
+                                  double X[], int labels[], uint64_t seed) {
+    lb_rng_t rng;
+    lb_rng_seed(&rng, seed);
+
     // Allocate temporary buffers for labels during K search
     int *labels_temp1 = (int*)malloc(I * sizeof(int));
     int *labels_temp2 = (int*)malloc(I * sizeof(int));
@@ -115,24 +125,15 @@ int categorize_kmeans_silhouette(int I, int Kmax, int Kmin, int minN,
     }
     
     // Find optimal K using silhouette method
-    // Returns K + 0.5*buffer_indicator
-    double result = kmeans_silhouette(I, Kmax, Kmin, minN, X, labels_temp1, labels_temp2);
-    
-    int optimal_k = (int)result;
-    int buffer_used = (result - optimal_k > 0.25) ? 1 : 0;  // 0.5 indicates temp2
+    int optimal_k = kmeans_silhouette(I, Kmax, Kmin, minN, X, labels_temp1, labels_temp2, &rng);
     
     printf("Optimal K found: %d\n", optimal_k);
     
-    // Copy labels from the correct buffer
-    if (buffer_used == 0) {
-        for (int i = 0; i < I; i++) {
-            labels[i] = labels_temp1[i];
-        }
-    } else {
-        for (int i = 0; i < I; i++) {
-            labels[i] = labels_temp2[i];
-        }
-    }
+    // Produce the final labelling with the chosen K. The temporary buffers
+    // hold clusterings for whichever K happened to be tested last, not for
+    // optimal_k, so copying from them would return labels inconsistent with
+    // the K reported to the caller.
+    kmeans_execute(I, optimal_k, X, labels, 2.0, &rng);
     
     // Clean up
     free(labels_temp1);
@@ -163,8 +164,12 @@ void get_cluster_centers(int I, int K, double X[], int labels[], double centers[
         counts[k] = 0;
     }
     
-    // Sum values for each cluster
+    // Sum values for each cluster.
+    // Labels outside [0, K) are skipped: writing centers[labels[i]] blindly
+    // corrupts the heap when the caller passes a K smaller than the number of
+    // clusters actually present in `labels`.
     for (int i = 0; i < I; i++) {
+        if (labels[i] < 0 || labels[i] >= K) continue;
         centers[labels[i]] += X[i];
         counts[labels[i]]++;
     }
@@ -191,8 +196,10 @@ void get_cluster_sizes(int I, int K, int labels[], int sizes[]) {
         sizes[k] = 0;
     }
     
-    // Count elements per cluster
+    // Count elements per cluster. Out-of-range labels are skipped, for the
+    // same reason as in get_cluster_centers().
     for (int i = 0; i < I; i++) {
+        if (labels[i] < 0 || labels[i] >= K) continue;
         sizes[labels[i]]++;
     }
 }

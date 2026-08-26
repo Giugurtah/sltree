@@ -6,7 +6,7 @@
 #   make clean    → remove build artefacts
 
 CC      = gcc
-CFLAGS  = -fPIC -shared -O2 -Wall
+CFLAGS  = -fPIC -shared -O2 -Wall -I../common
 LDFLAGS = -lm
 SOURCES = categorizer_core.c kmeans.c kmeans_init.c kmeans_metrics.c
 INSTALL_DIR = ../../lbtree/_preprocessing/_backend
@@ -27,7 +27,7 @@ endif
 
 all: $(LIB)
 
-$(LIB): $(SOURCES) categorizer.h kmeans.h
+$(LIB): $(SOURCES) categorizer.h kmeans.h ../common/lbrandom.h
 	$(CC) $(CFLAGS) -o $@ $(SOURCES) $(LDFLAGS)
 	@echo "✓  Built $(LIB)"
 

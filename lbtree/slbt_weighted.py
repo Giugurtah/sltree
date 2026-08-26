@@ -73,6 +73,8 @@ class SLBTWeighted(BaseLBTree):
         max_depth: int         = 5,
         feats_viewed: int      = 10,
         FAST: bool             = True,
+        rng                    = None,
+        random_state: int | None = None,
     ):
         super().__init__(
             min_ppi=min_ppi, min_gpi=min_gpi,
@@ -85,11 +87,31 @@ class SLBTWeighted(BaseLBTree):
                 f"homogeneity='{homogeneity}' not supported. "
                 "Choose from: 'none', 'A', 'B', 'AB'."
             )
-        self.homogeneity = homogeneity
+        self.homogeneity  = homogeneity
+        self._rng         = rng
+        self.random_state = random_state
+
+
+    def _next_als_seed(self) -> int:
+        """
+        Draw the next seed for the ALS initialisation.
+
+        ``score_slbt`` runs once per candidate feature at every node, so a
+        single fixed seed would start every one of them from the same matrices.
+        A generator seeded once per fit yields a different seed per call while
+        keeping the whole fit reproducible.
+
+        Precedence: an ``rng`` supplied from outside (the ensembles pass one)
+        wins over ``random_state``, so the ensemble's seed governs its trees.
+        """
+        if self._rng is None:
+            self._rng = np.random.default_rng(self.random_state)
+        return int(self._rng.integers(0, 2 ** 63))
 
     def get_params(self, deep: bool = True) -> dict:
         p = super().get_params(deep)
-        p["homogeneity"] = self.homogeneity
+        p["homogeneity"]  = self.homogeneity
+        p["random_state"] = self.random_state
         p.pop("model", None)
         return p
 
@@ -152,7 +174,6 @@ class SLBTWeighted(BaseLBTree):
             root_impurity=root_imp, W_root=W_root,
         )
         self._calculate_tree_partial_impurity_reduction()
-        self._calculate_tree_partial_tau_reduction()
         return self
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
@@ -179,7 +200,6 @@ class SLBTWeighted(BaseLBTree):
         W_root: float         = 1.0,
         depth: int            = 0,
         pos: int              = 1,
-        parent_cum_tau: float = 0.0,
     ) -> Node:
 
         X = self._drop_constant_columns(X)
@@ -193,14 +213,11 @@ class SLBTWeighted(BaseLBTree):
             if root_impurity > 0 else 0.0
         )
 
-        cumulative_path_tau = parent_cum_tau
-
         # --- pre-split stopping criteria ---
         leaf = self._check_criteria_before(
             y, w, pos, impurity, distribution, depth,
             n_labels, n_samples, n_feats,
             impurity_decrease,
-            parent_cum_tau=cumulative_path_tau,
         )
         if leaf is not None:
             return leaf
@@ -218,13 +235,9 @@ class SLBTWeighted(BaseLBTree):
             y, w, pos, impurity, distribution, depth,
             best_gpi, best_pi,
             impurity_decrease,
-            parent_cum_tau=cumulative_path_tau,
         )
         if leaf is not None:
             return leaf
-
-        tau_decrease  = best_pi * (1.0 - impurity_decrease)
-        child_cum_tau = cumulative_path_tau + tau_decrease
 
         x_vals    = np.unique(X[best_feature])
         thresholds = strategy.get_treshold_values(best_treshold, x_vals, x_s)
@@ -235,13 +248,11 @@ class SLBTWeighted(BaseLBTree):
             strategy,
             X.loc[indexL], y[indexL], x_s[indexL], w[indexL],
             root_impurity, W_root, depth + 1, 2 * pos,
-            parent_cum_tau=child_cum_tau,
         )
         right = self._grow_tree(
             strategy,
             X.loc[indexR], y[indexR], x_s[indexR], w[indexR],
             root_impurity, W_root, depth + 1, 2 * pos + 1,
-            parent_cum_tau=child_cum_tau,
         )
 
         node = Node(
@@ -251,9 +262,6 @@ class SLBTWeighted(BaseLBTree):
             impurity=impurity,
             impurity_decrease=impurity_decrease,
             tree_partial_impurity_reduction=0.0,
-            tau_decrease=tau_decrease,
-            cumulative_path_tau=cumulative_path_tau,
-            tree_partial_tau_reduction=0.0,
             distribution=distribution, N=n_samples, labels=np.unique(y),
             LIFT_1=lift1, LIFT_2=lift2,
             GCR=None,
@@ -281,7 +289,9 @@ class SLBTWeighted(BaseLBTree):
             Fs_noN = _stratified_contingency_weighted(X[col], y, x_s, w, norm=False)
             Fs     = _stratified_contingency_weighted(X[col], y, x_s, w, norm=True)
 
-            pi, S, alpha, beta = score_slbt(Fs_noN, Fs, self.homogeneity)
+            pi, S, alpha, beta = score_slbt(
+                Fs_noN, Fs, self.homogeneity, self._next_als_seed()
+            )
 
             if pi > best["pi"]:
                 best["pi"]        = pi
@@ -313,7 +323,6 @@ class SLBTWeighted(BaseLBTree):
         self, y, w, pos, impurity, distribution, depth,
         n_labels, n_samples, n_feats,
         impurity_decrease,
-        parent_cum_tau=0.0,
     ):
         if (depth >= self.max_depth
                 or n_labels == 1
@@ -322,7 +331,7 @@ class SLBTWeighted(BaseLBTree):
                 or impurity  < self.min_impurity):
             return self._make_leaf(
                 y, w, pos, impurity, distribution,
-                impurity_decrease, parent_cum_tau=parent_cum_tau,
+                impurity_decrease,
             )
         return None
 
@@ -330,18 +339,17 @@ class SLBTWeighted(BaseLBTree):
         self, y, w, pos, impurity, distribution, depth,
         best_gpi, best_pi,
         impurity_decrease,
-        parent_cum_tau=0.0,
     ):
         if best_gpi < self.min_gpi or best_pi < self.min_ppi or best_pi < 1e-8:
             return self._make_leaf(
                 y, w, pos, impurity, distribution,
-                impurity_decrease, parent_cum_tau=parent_cum_tau,
+                impurity_decrease,
             )
         return None
 
     def _make_leaf(
         self, y, w, pos, impurity, distribution,
-        impurity_decrease, parent_cum_tau=0.0,
+        impurity_decrease,
     ) -> Node:
         # Weighted majority: class with highest total weight
         y_arr   = np.asarray(y)
@@ -356,9 +364,6 @@ class SLBTWeighted(BaseLBTree):
             impurity=impurity,
             impurity_decrease=impurity_decrease,
             tree_partial_impurity_reduction=0.0,
-            tau_decrease=0.0,
-            cumulative_path_tau=parent_cum_tau,
-            tree_partial_tau_reduction=0.0,
             distribution=distribution,
             N=len(y),
             labels=classes,
@@ -440,32 +445,6 @@ class SLBTWeighted(BaseLBTree):
             else:
                 current.tree_partial_impurity_reduction = part_imp_red
 
-    def _calculate_tree_partial_tau_reduction(self):
-        if self.root is None:
-            return
-        all_nodes = []
-        self._collect_nodes(self.root, all_nodes)
-        all_nodes.sort(key=lambda n: (n.cumulative_path_tau or 0.0))
-        _bubble_sort_tau_nodes(all_nodes)
-
-        self.root.tree_partial_tau_reduction = 0.0
-        part_tau           = 0.0
-        virtual_leaves     = [self.root.left, self.root.right]
-        virtual_leaves_set = {self.root.left, self.root.right}
-
-        for current in all_nodes[1:]:
-            if current in virtual_leaves_set and not current._is_leaf_node():
-                virtual_leaves.remove(current)
-                virtual_leaves_set.discard(current)
-                virtual_leaves.append(current.left)
-                virtual_leaves_set.add(current.left)
-                virtual_leaves.append(current.right)
-                virtual_leaves_set.add(current.right)
-                part_tau += current.tau_decrease
-                current.tree_partial_tau_reduction = part_tau
-            else:
-                current.tree_partial_tau_reduction = part_tau
-
     # ================================================================
     #  REPR
     # ================================================================
@@ -494,15 +473,3 @@ def _bubble_sort_nodes(nodes):
                 nodes[i], nodes[i + 1] = nodes[i + 1], nodes[i]
                 changed = True
 
-
-def _bubble_sort_tau_nodes(nodes):
-    changed, max_iter, iteration = True, len(nodes) * 2, 0
-    while changed and iteration < max_iter:
-        changed   = False
-        iteration += 1
-        for i in range(len(nodes) - 1):
-            a = nodes[i].cumulative_path_tau     or 0.0
-            b = nodes[i + 1].cumulative_path_tau or 0.0
-            if a > b:
-                nodes[i], nodes[i + 1] = nodes[i + 1], nodes[i]
-                changed = True

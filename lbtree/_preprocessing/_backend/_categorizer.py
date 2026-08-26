@@ -14,9 +14,13 @@ ctypes interface for libcategorizer — the KMeans discretizer C backend.
 
 Exposed functions
 -----------------
-categorize_fixed_k(X, k)                          → (labels, centers)
-categorize_elbow(X, k_max, k_min, min_size)        → (labels, centers, k_opt)
-categorize_silhouette(X, k_max, k_min, min_size)   → (labels, centers, k_opt)
+categorize_fixed_k(X, k, seed)                          → (labels, centers)
+categorize_elbow(X, k_max, k_min, min_size, seed)        → (labels, centers, k_opt)
+categorize_silhouette(X, k_max, k_min, min_size, seed)   → (labels, centers, k_opt)
+
+Every entry point takes an explicit 64-bit ``seed``: the C backend seeds a
+local generator with it (see csrc/common/lbrandom.h), so the same seed on the
+same data always produces the same clustering, on every platform.
 get_centers(X, labels, k)                          → centers
 get_sizes(labels, k)                               → sizes
 
@@ -57,6 +61,7 @@ _lib = ctypes.CDLL(str(_find_lib()))
 
 c_int    = ctypes.c_int
 c_double = ctypes.c_double
+c_uint64 = ctypes.c_uint64
 p_int    = ctypes.POINTER(c_int)
 p_double = ctypes.POINTER(c_double)
 
@@ -64,13 +69,13 @@ p_double = ctypes.POINTER(c_double)
 #  Function signatures
 # ------------------------------------------------------------------ #
 
-_lib.categorize_kmeans.argtypes = [c_int, c_int, p_double, p_int]
+_lib.categorize_kmeans.argtypes = [c_int, c_int, p_double, p_int, c_uint64]
 _lib.categorize_kmeans.restype  = None
 
-_lib.categorize_kmeans_elbow.argtypes = [c_int, c_int, c_int, c_int, p_double, p_int]
+_lib.categorize_kmeans_elbow.argtypes = [c_int, c_int, c_int, c_int, p_double, p_int, c_uint64]
 _lib.categorize_kmeans_elbow.restype  = c_int
 
-_lib.categorize_kmeans_silhouette.argtypes = [c_int, c_int, c_int, c_int, p_double, p_int]
+_lib.categorize_kmeans_silhouette.argtypes = [c_int, c_int, c_int, c_int, p_double, p_int, c_uint64]
 _lib.categorize_kmeans_silhouette.restype  = c_int
 
 _lib.get_cluster_centers.argtypes = [c_int, c_int, p_double, p_int, p_double]
@@ -84,7 +89,7 @@ _lib.get_cluster_sizes.restype  = None
 #  Python wrappers
 # ------------------------------------------------------------------ #
 
-def categorize_fixed_k(X: np.ndarray, k: int):
+def categorize_fixed_k(X: np.ndarray, k: int, seed: int = 0):
     """
     Categorise data with a fixed number of KMeans clusters.
 
@@ -92,6 +97,7 @@ def categorize_fixed_k(X: np.ndarray, k: int):
     ----------
     X : np.ndarray  — 1-D array, sorted
     k : int         — number of clusters
+    seed : int      — 64-bit seed for the k-means++ initialisation
 
     Returns
     -------
@@ -104,6 +110,7 @@ def categorize_fixed_k(X: np.ndarray, k: int):
         len(X), k,
         X.ctypes.data_as(p_double),
         labels.ctypes.data_as(p_int),
+        c_uint64(seed & 0xFFFFFFFFFFFFFFFF),
     )
     centers = get_centers(X, labels, k)
     return labels, centers
@@ -114,6 +121,7 @@ def categorize_elbow(
     k_max: int   = 10,
     k_min: int   = 2,
     min_size: int = 1,
+    seed: int    = 0,
 ):
     """
     Categorise data using automatic K selection via the elbow method.
@@ -130,6 +138,7 @@ def categorize_elbow(
         len(X), k_max, k_min, min_size,
         X.ctypes.data_as(p_double),
         labels.ctypes.data_as(p_int),
+        c_uint64(seed & 0xFFFFFFFFFFFFFFFF),
     )
     centers = get_centers(X, labels, k_opt)
     return labels, centers, k_opt
@@ -140,6 +149,7 @@ def categorize_silhouette(
     k_max: int   = 10,
     k_min: int   = 2,
     min_size: int = 1,
+    seed: int    = 0,
 ):
     """
     Categorise data using automatic K selection via the silhouette method.
@@ -156,6 +166,7 @@ def categorize_silhouette(
         len(X), k_max, k_min, min_size,
         X.ctypes.data_as(p_double),
         labels.ctypes.data_as(p_int),
+        c_uint64(seed & 0xFFFFFFFFFFFFFFFF),
     )
     centers = get_centers(X, labels, k_opt)
     return labels, centers, k_opt
