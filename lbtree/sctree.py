@@ -141,8 +141,17 @@ class SCTree(BaseLBTree):
         """
         Prune the tree at the node identified by *nodeID*.
 
-        All nodes with ``impurity_decrease`` ≤ that of *nodeID* are
-        collapsed into leaves.
+        Nodes are expanded in ascending order of ``impurity_decrease`` until
+        *nodeID* is reached; everything still unexpanded at that point is
+        collapsed into a leaf.  Since ``impurity_decrease`` grows away from
+        the root, the nodes that survive are those with a value **below**
+        that of *nodeID*, and those collapsed are the ones with a value
+        greater than or equal to it.
+
+        This is the horizontal cut of the visual-pruning canvas: what lies
+        above the cutting line is pruned away.  ``impurity_decrease`` is the
+        node impurity proportional reduction of Iorio, Aria, D'Ambrosio and
+        Siciliano (2019), equation 3.1 normalised by the root impurity.
         """
         if self.root is None:
             return
