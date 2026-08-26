@@ -2,14 +2,14 @@
 #
 # Usage:
 #   make          → build shared library
-#   make install  → build + copy to lbtree/_preprocessing/_backend/
+#   make install  → build + copy to sltree/_preprocessing/_backend/
 #   make clean    → remove build artefacts
 
 CC      = gcc
 CFLAGS  = -fPIC -shared -O2 -Wall -I../common
 LDFLAGS = -lm
 SOURCES = categorizer_core.c kmeans.c kmeans_init.c kmeans_metrics.c
-INSTALL_DIR = ../../lbtree/_preprocessing/_backend
+INSTALL_DIR = ../../sltree/_preprocessing/_backend
 
 # ---- Platform detection ----
 UNAME_S := $(shell uname -s)

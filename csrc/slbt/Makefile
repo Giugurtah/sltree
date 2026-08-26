@@ -2,14 +2,14 @@
 #
 # Usage:
 #   make          → build shared library
-#   make install  → build + copy to lbtree/_backend/
+#   make install  → build + copy to sltree/_backend/
 #   make clean    → remove build artefacts
 
 CC      = gcc
 CFLAGS  = -fPIC -shared -O3 -Wall -Wextra -I../common
 LDFLAGS = -lm
 SOURCES = slbt_core.c slbt_als.c linalg.c
-INSTALL_DIR = ../../lbtree/_backend
+INSTALL_DIR = ../../sltree/_backend
 
 # ---- Platform detection ----
 UNAME_S := $(shell uname -s)

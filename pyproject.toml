@@ -3,9 +3,9 @@ requires = ["setuptools >= 77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name            = "lbtree"
+name            = "sltree"
 version         = "0.1.0"
-description     = "Latent Budget Tree — Decision trees for categorical predictors based on Latent Budget Analysis"
+description     = "SL-TREE: interpretable tree models grounded in statistical learning theory, with predictability-driven growth, latent budget trees, visual pruning and non-parametric imputation"
 readme          = "README.md"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
@@ -34,8 +34,8 @@ dev = ["pytest", "scikit-learn"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["lbtree*"]
+include = ["sltree*"]
 
 [tool.setuptools.package-data]
-"lbtree._backend"                  = ["*.so", "*.dylib", "*.dll"]
-"lbtree._preprocessing._backend"  = ["*.so", "*.dylib", "*.dll"]
+"sltree._backend"                  = ["*.so", "*.dylib", "*.dll"]
+"sltree._preprocessing._backend"  = ["*.so", "*.dylib", "*.dll"]

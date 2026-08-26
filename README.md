@@ -16,13 +16,13 @@ SL-TREE is organised around five technological pillars:
 
 | Class | Description |
 |---|---|
-| `SCTree` | Single tree (TWO-STAGE / CART-TWOING / TWO-CLASS) |
-| `SCTreeWeighted` | Weighted variant of `SCTree` (AdaBoost weak learner) |
+| `PredictabilityTree` | Single tree (TWO-STAGE / CART-TWOING / TWO-CLASS) |
+| `PredictabilityTreeWeighted` | Weighted variant of `PredictabilityTree` (AdaBoost weak learner) |
 | `SLBT` | Simultaneous Latent Budget Tree for stratified/multilevel data |
 | `SLBTWeighted` | Weighted variant of `SLBT` |
-| `SCTreeForest` | Random Forest of `SCTree` with PPI feature importance |
+| `PredictabilityForest` | Random Forest of `PredictabilityTree` with PPI feature importance |
 | `SLBTForest` | Random Forest of `SLBT` |
-| `AdaBoostForest` | AdaBoost.M1 ensemble of `SCTree` |
+| `PredictabilityAdaBoost` | AdaBoost.M1 ensemble of `PredictabilityTree` |
 | `SLBTAdaBoostForest` | AdaBoost.M1 ensemble of `SLBT` |
 | `BINPI` | Boosted Incremental Non-Parametric Imputation |
 | `Categorizer` | KMeans-based continuous → categorical discretizer |
@@ -61,20 +61,20 @@ pip install -e .
 ## Quick start
 
 ```python
-from lbtree import SCTree, Categorizer
+from sltree import PredictabilityTree, Categorizer
 
 # Discretise continuous predictors
 cat = Categorizer(method="elbow", k_max=5)
 X_cat = cat.fit_transform(X).astype(str)
 
 # Fit a tree
-tree = SCTree(model="twoStage", max_depth=4, feats_viewed=10)
+tree = PredictabilityTree(model="twoStage", max_depth=4, feats_viewed=10)
 tree.fit(X_cat, y)
 predictions = tree.predict(X_cat)
 ```
 
 ```python
-from lbtree import SLBT, plot_html
+from sltree import SLBT, plot_html
 
 # Stratified Latent Budget Tree
 tree = SLBT(homogeneity="AB", feats_viewed=5, FAST=True,
@@ -86,7 +86,7 @@ plot_html(tree, "tree.html", visual_pruning=True)
 ```
 
 ```python
-from lbtree import BINPI
+from sltree import BINPI
 
 # Non-parametric missing data imputation
 imputer = BINPI(ensemble="forest", n_estimators=50)
