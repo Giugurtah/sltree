@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools >= 65", "wheel"]
+requires = ["setuptools >= 77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,21 @@ version         = "0.1.0"
 description     = "Latent Budget Tree — Decision trees for categorical predictors based on Latent Budget Analysis"
 readme          = "README.md"
 requires-python = ">=3.10"
-license         = "MIT"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: C",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
 
 dependencies = [
     "numpy  >= 1.23",

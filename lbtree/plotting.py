@@ -1,3 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Cristian Buoncompagni, Giulia Vannucci, Roberta Siciliano
+#
+# This file is part of SL-TREE. SL-TREE is free software: you can
+# redistribute it and/or modify it under the terms of the GNU General
+# Public License as published by the Free Software Foundation, either
+# version 3 of the License, or (at your option) any later version.
+# See the LICENSE file, or <https://www.gnu.org/licenses/>.
+
 """
 lbtree/plotting.py
 ==================
@@ -82,6 +91,22 @@ def _custom_round(value, decimals=2):
     return round(float(value), decimals)
 
 
+def _serialize_lift(lift):
+    """Convert LIFT_1 / LIFT_2 to a JSON-serialisable structure.
+
+    Stratified modes ("A", "none"):  lift is a list of 1-D arrays, one per
+        stratum → serialised as list[list[float]].
+    Shared modes ("B", "AB"):        lift is a single 1-D array → list[float].
+    """
+    if lift is None:
+        return None
+    if isinstance(lift, list):
+        # Stratified: list of numpy arrays
+        return [[round(float(v), 4) for v in arr] for arr in lift]
+    # Shared: single numpy array
+    return [round(float(v), 4) for v in lift]
+
+
 # ============================================================
 #  Tree → dict  (two modes)
 # ============================================================
@@ -139,6 +164,9 @@ def _recurse_vp(node: Node):
         "tree_partial_tau_reduction":      float(node.tree_partial_tau_reduction) if node.tree_partial_tau_reduction is not None else 0.0,
         "labels":                          int(node.N),
         "labArray":                        node.labels.tolist(),
+        "strat_labels":                    node.strat_labels.tolist() if node.strat_labels is not None else None,
+        "lift1":                           _serialize_lift(node.LIFT_1),
+        "lift2":                           _serialize_lift(node.LIFT_2),
         "y_stats":                         node.y_stats,
         "children": [
             _recurse_vp(node.left),
@@ -189,6 +217,9 @@ def _recurse_std(node: Node, depth: int = 0):
         "labels":       int(node.N),
         "depth":        depth,
         "labArray":     node.labels.tolist(),
+        "strat_labels": node.strat_labels.tolist() if node.strat_labels is not None else None,
+        "lift1":        _serialize_lift(node.LIFT_1),
+        "lift2":        _serialize_lift(node.LIFT_2),
         "y_stats":      node.y_stats,
         "children": [
             _recurse_std(node.left,  depth + 1),
@@ -420,6 +451,27 @@ def _js_common():
             document.querySelectorAll('.highlighted-branch').forEach(el => el.classList.remove('highlighted-branch'));
         }
 
+        // ---- LIFT formatting helper ----
+        // Stratified ("A", "none"):  lift = [[s0_c0, s0_c1, ...], [s1_c0, ...], ...]
+        // Shared ("B", "AB"):        lift = [c0, c1, ...]
+        function fmtLift(lift, labArray, stratLabels, side) {
+            if (!lift || lift.length === 0) return "";
+            if (Array.isArray(lift[0])) {
+                // Stratified
+                let out = "";
+                for (let t = 0; t < lift.length; t++) {
+                    const sl   = stratLabels ? stratLabels[t] : t;
+                    const vals = labArray.map((lbl, i) => lbl + "=" + lift[t][i].toFixed(3)).join(", ");
+                    out += "\\nLIFT " + side + " [s=" + sl + "]: [" + vals + "]";
+                }
+                return out;
+            } else {
+                // Shared
+                const vals = labArray.map((lbl, i) => lbl + "=" + lift[i].toFixed(3)).join(", ");
+                return "\\nLIFT " + side + ": [" + vals + "]";
+            }
+        }
+
         function showTooltip(event, node, top, left) {
             const tooltip = document.getElementById('tooltip');
             let text;
@@ -446,7 +498,9 @@ def _js_common():
                 if (node.isLeaf == 1) {
                     text = "Id: " + node.position + "\\nN: " + node.labels + "\\nDistribution: [" + node.distribution + "]\\nGCR: [" + node.gcr + "]\\nImpurity: " + node.impurity.toFixed(3) + "\\nPrediction: " + node.value;
                 } else {
-                    text = "Id: " + node.position + "\\nN: " + node.labels + "\\nDistribution: [" + node.distribution + "]\\nFeature: " + node.feature + "\\nThreshold left: [" + node.treshold + "]\\nGPI: " + node.gpi.toFixed(3) + "\\nPPI: " + node.pi.toFixed(3) + "\\nImpurity: " + node.impurity.toFixed(3);
+                    const liftText = fmtLift(node.lift1, node.labArray, node.strat_labels, "sx")
+                                   + fmtLift(node.lift2, node.labArray, node.strat_labels, "dx");
+                    text = "Id: " + node.position + "\\nN: " + node.labels + "\\nDistribution: [" + node.distribution + "]\\nFeature: " + node.feature + "\\nThreshold left: [" + node.treshold + "]\\nGPI: " + node.gpi.toFixed(3) + "\\nPPI: " + node.pi.toFixed(3) + "\\nImpurity: " + node.impurity.toFixed(3) + liftText;
                 }
             }
             tooltip.innerText = text;

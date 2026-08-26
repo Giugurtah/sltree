@@ -96,3 +96,10 @@ X_imputed = imputer.fit_transform(X_cat)
 ## Citation
 
 If you use SL-TREE in your research, please cite us.
+
+## License
+
+SL-TREE is free software, released under the GNU General Public License,
+version 3 or later. See [LICENSE](LICENSE) for the full text.
+
+Copyright (C) 2026 Cristian Buoncompagni, Giulia Vannucci, Roberta Siciliano.
