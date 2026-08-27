@@ -39,3 +39,12 @@ include = ["sltree*"]
 [tool.setuptools.package-data]
 "sltree._backend"                  = ["*.so", "*.dylib", "*.dll"]
 "sltree._preprocessing._backend"  = ["*.so", "*.dylib", "*.dll"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Two tiers, per rOpenSci G5.10: the fast tier runs by default in about half a
+# minute; `pytest --extended` adds the long-running ones.
+markers = [
+    "extended: long-running test; needs --extended to run",
+]
+filterwarnings = ["error::DeprecationWarning"]
