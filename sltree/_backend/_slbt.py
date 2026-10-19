@@ -15,7 +15,8 @@ ctypes interface for libslbt — the SLBT (Simultaneous Latent Budget Tree) C ba
 Exposed functions
 -----------------
 gpi(K, I, J, Fs_flat)                              → float
-slba(K, KA, KB, I, J, FsNoN_flat, Fs_flat, seed)   → (pi, S, alpha, beta)
+slba(K, KA, KB, I, J, FsNoN_flat, Fs_flat, seed, n_init, max_iter, tol)
+                                                   → (pi, S, alpha, beta, diag)
 
 The shared library (libslbt.so / .dylib / .dll) must have been
 compiled from csrc/slbt/ and copied into this directory.
@@ -95,9 +96,23 @@ _lib.slba_c.argtypes = [
     p_double,                 # out_S   (KA*I)
     p_double,                 # out_alpha (KA*I*2)
     p_double,                 # out_beta  (KB*J*2)
-    c_uint64,                 # seed for the ALS initialisation
+    c_uint64,                 # seed for the random initialisation
+    c_int,                    # n_init
+    c_int,                    # max_iter
+    c_double,                 # tol
+    c_int,                    # optimizer: 0 softmax, 1 projected
+    p_double,                 # out_diag (SLBA_NDIAG)
 ]
 _lib.slba_c.restype = None
+
+_OPTIMIZERS = {"softmax": 0, "projected": 1}
+
+#: Number of diagnostics returned by the C fit (see csrc/slbt/slbt_als.h).
+SLBA_NDIAG = 7
+_DIAG_KEYS = (
+    "loss", "loss_worst_start", "n_iter", "converged",
+    "n_converged_starts", "n_same_split_starts", "n_init",
+)
 
 
 def slba(
@@ -106,6 +121,10 @@ def slba(
     FsNoN_flat: np.ndarray,
     Fs_flat: np.ndarray,
     seed: int = 0,
+    n_init: int = 1,
+    max_iter: int = 5000,
+    tol: float = 1e-12,
+    optimizer: str = "softmax",
 ):
     """
     Simultaneous Latent Budget Analysis split.
@@ -114,23 +133,37 @@ def slba(
     ----------
     K, KA, KB   : homogeneity parameters
     I, J        : predictor modalities, target classes
-    FsNoN_flat  : raw joint frequencies (not normalised), shape (K*I*J,)
-    Fs_flat     : row-conditional stratified array, shape (K*I*J,)
-    seed        : 64-bit seed for the ALS random initialisation.  The ALS
-                  starts from random matrices U and Z, so the same data with
-                  a different seed can converge to a different local optimum.
+    FsNoN_flat  : joint proportions at the node (summing to 1), shape (K*I*J,)
+    Fs_flat     : table for the least-squares fit, shape (K*I*J,): the
+                  observed row budgets, optionally multiplied by row weights
+    seed        : 64-bit seed for the random initialisation.  Start 0 draws
+                  the same matrices as the original single-start code.
+    n_init      : number of random starts; the one with the lowest loss is kept
+    max_iter    : iteration cap per start
+    tol         : relative-decrease tolerance of the descent
+    optimizer   : "softmax"   — gradient descent on the softmax parameters
+                                (Eq. 16-19 of the SLBT paper);
+                  "projected" — projected gradient on the simplex, same
+                                objective and gradients (Eq. 14-15) without
+                                the reparameterisation; reaches optima on the
+                                boundary of the simplex exactly.
 
     Returns
     -------
-    pi    : float
-    S     : np.ndarray, shape (KA, I)
+    pi    : float  — Predictability Improvement tau_{Y|s,Z}
+    S     : np.ndarray, shape (KA, I) — 1 = row goes left
     alpha : np.ndarray, shape (KA, I, 2)
     beta  : np.ndarray, shape (KB, J, 2)
+    diag  : dict — convergence diagnostics of the fit
     """
-    out_pi    = np.zeros(1,         dtype=np.float64)
-    out_S     = np.zeros(KA * I,    dtype=np.float64)
+    out_pi    = np.zeros(1,          dtype=np.float64)
+    out_S     = np.zeros(KA * I,     dtype=np.float64)
     out_alpha = np.zeros(KA * I * 2, dtype=np.float64)
     out_beta  = np.zeros(KB * J * 2, dtype=np.float64)
+    out_diag  = np.zeros(SLBA_NDIAG, dtype=np.float64)
+
+    FsNoN_flat = np.ascontiguousarray(FsNoN_flat, dtype=np.float64)
+    Fs_flat    = np.ascontiguousarray(Fs_flat,    dtype=np.float64)
 
     _lib.slba_c(
         K, KA, KB, I, J,
@@ -141,11 +174,20 @@ def slba(
         out_alpha.ctypes.data_as(p_double),
         out_beta.ctypes.data_as(p_double),
         c_uint64(seed & 0xFFFFFFFFFFFFFFFF),
+        int(n_init), int(max_iter), float(tol),
+        _OPTIMIZERS[optimizer],
+        out_diag.ctypes.data_as(p_double),
     )
+
+    diag = dict(zip(_DIAG_KEYS, out_diag.tolist()))
+    for key in ("n_iter", "converged", "n_converged_starts",
+                "n_same_split_starts", "n_init"):
+        diag[key] = int(diag[key])
 
     return (
         float(out_pi[0]),
         out_S.reshape(KA, I),
         out_alpha.reshape(KA, I, 2),
         out_beta.reshape(KB, J, 2),
+        diag,
     )

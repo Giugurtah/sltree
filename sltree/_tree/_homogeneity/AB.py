@@ -11,6 +11,7 @@
 from __future__ import annotations
 import numpy as np
 from .base import HomogeneityStrategy
+from .._stratified import safe_ratio
 from ..split import _split
 
 
@@ -34,10 +35,20 @@ class HomogeneityAB(HomogeneityStrategy):
     def split(self, X_best, x_s, threshold):
         return _split(X_best, threshold)
 
-    def compute_lift(self, beta, distribution):
+    def compute_lift(self, beta, strat_dist):
+        """
+        Lift (Eq. 4): beta_{j|k} / p_{j|(g)}, one array per stratum.
+
+        The latent budgets are shared across strata, but the prior
+        p_{j|(g)}(t) is not, so the Lift still differs between strata.  With a
+        single stratum (LBT, no stratification) a flat array is returned.
+        """
         bt = np.asarray(beta)
         if bt.ndim == 3:
-            bt = bt[0]
-        beta_left  = bt[:, 0]
-        beta_right = bt[:, 1]
-        return beta_left / distribution, beta_right / distribution
+            bt = bt[0]   # single shared B
+        strat_dist = np.atleast_2d(strat_dist)
+        lift1 = [safe_ratio(bt[:, 0], d) for d in strat_dist]
+        lift2 = [safe_ratio(bt[:, 1], d) for d in strat_dist]
+        if len(strat_dist) == 1:
+            return lift1[0], lift2[0]
+        return lift1, lift2

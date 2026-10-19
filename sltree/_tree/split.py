@@ -100,24 +100,64 @@ _HOMOGENEITY_MAP = {
 }
 
 
+#: Row weighting of the least-squares SLBM fit.
+LS_WEIGHTS = ("budget", "frequency")
+
+
+def _ls_table(Fs_noN: np.ndarray, Fs: np.ndarray, ls_weights: str) -> np.ndarray:
+    """
+    Table handed to the least-squares fit.
+
+    "budget"    : the observed budgets p_{.|i(t)} themselves, so every
+                  observed (stratum, category) row weighs the same in the
+                  loss.  This is what the library did before this revision.
+    "frequency" : budgets multiplied by the row frequency, i.e. Eq. 13 of
+                  the SLBT paper with D_t = diag of the row counts.  Rows
+                  are rescaled so that the mean weight of the observed rows
+                  is 1: the minimiser is unchanged, and the loss stays on
+                  the same scale as in the "budget" case, which keeps the
+                  step size of the descent comparable.
+    """
+    if ls_weights == "budget":
+        return Fs
+    if ls_weights == "frequency":
+        row_w = Fs_noN.sum(axis=2)                 # (K, I) joint row mass
+        observed = row_w > 0
+        if not observed.any():
+            return Fs
+        row_w = row_w / row_w[observed].mean()
+        return Fs * row_w[:, :, None]
+    raise ValueError(
+        f"Unknown ls_weights '{ls_weights}'. Choose from: {list(LS_WEIGHTS)}"
+    )
+
+
 def score_slbt(Fs_noN: np.ndarray, Fs: np.ndarray, homogeneity: str = "none",
-               seed: int = 0):
+               seed: int = 0, n_init: int = 1, ls_weights: str = "budget",
+               max_iter: int = 5000, tol: float = 1e-12,
+               optimizer: str = "softmax"):
     """
     Call the C SLBT splitting algorithm (slba).
 
     Parameters
     ----------
-    Fs_noN     : np.ndarray, shape (K, I, J) — raw joint frequencies (not normalised)
-    Fs         : np.ndarray, shape (K, I, J) — row-conditional stratified frequencies
+    Fs_noN     : np.ndarray, shape (K, I, J) — joint proportions at the node
+    Fs         : np.ndarray, shape (K, I, J) — row-conditional budgets
     homogeneity : str — "none" | "A" | "B" | "AB"
-    seed        : int — 64-bit seed for the ALS random initialisation
+    seed        : int — 64-bit seed for the random initialisation
+    n_init      : int — number of random starts of the least-squares fit
+    ls_weights  : {"budget", "frequency"} — row weighting of the fit
+    max_iter    : int — iteration cap per start
+    tol         : float — relative-decrease tolerance
+    optimizer   : {"softmax", "projected"} — see ``_backend._slbt.slba``
 
     Returns
     -------
-    pi    : float
+    pi    : float  — tau_{Y|s,Z}
     S     : np.ndarray, shape (KA, I)
     alpha : np.ndarray, shape (KA, I, 2)
     beta  : np.ndarray, shape (KB, J, 2)
+    diag  : dict — convergence diagnostics
     """
     from sltree._backend._slbt import slba
 
@@ -130,9 +170,14 @@ def score_slbt(Fs_noN: np.ndarray, Fs: np.ndarray, homogeneity: str = "none",
     K, I, J    = Fs.shape
     KA, KB     = _HOMOGENEITY_MAP[homogeneity](K)
     FsNoN_flat = Fs_noN.ravel().astype(np.float64)
-    Fs_flat    = Fs.ravel().astype(np.float64)
+    Fs_flat    = _ls_table(Fs_noN, Fs, ls_weights).ravel().astype(np.float64)
 
-    return slba(K, KA, KB, I, J, FsNoN_flat, Fs_flat, seed)
+    if optimizer not in ("softmax", "projected"):
+        raise ValueError(
+            f"Unknown optimizer '{optimizer}'. Choose from: ['softmax', 'projected']"
+        )
+    return slba(K, KA, KB, I, J, FsNoN_flat, Fs_flat, seed,
+                n_init=n_init, max_iter=max_iter, tol=tol, optimizer=optimizer)
 
 
 # ============================================================
@@ -158,22 +203,24 @@ def _split(X_col: pd.Series, best_treshold) -> tuple:
 
 def _splitS(X_col: pd.Series, x_s: np.ndarray, best_treshold) -> tuple:
     """
-    Stratified split: ``best_treshold`` is a list of arrays, one per stratum.
+    Stratified split: ``best_treshold`` is a list of arrays, one per stratum,
+    in the order of ``np.unique(x_s)`` — the order in which
+    ``_stratified_contingency`` builds the tables.
 
     Returns
     -------
     indexL : np.ndarray bool
     indexR : np.ndarray bool
     """
-    x_vals   = X_col.astype(str)
-    s_vals   = x_s.astype(str)
-    strata   = np.unique(s_vals)
-
-    left_pairs = set()
+    x_s    = np.asarray(x_s)
+    strata = np.unique(x_s)          # natural order, NOT string order:
+                                     # with integer strata 2 and 10 the
+                                     # string order ('10' < '2') would pair
+                                     # each stratum with the wrong threshold
+    x_vals = X_col.astype(str).to_numpy()
+    indexL = np.zeros(len(x_vals), dtype=bool)
     for t, s in enumerate(strata):
-        for v in best_treshold[t]:
-            left_pairs.add((str(v), s))
-
-    pairs  = list(zip(x_vals, s_vals))
-    indexL = np.array([p in left_pairs for p in pairs])
+        in_s  = (x_s == s)
+        left  = {str(v) for v in best_treshold[t]}
+        indexL |= in_s & np.isin(x_vals, list(left))
     return indexL, ~indexL

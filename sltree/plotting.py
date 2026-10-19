@@ -21,6 +21,8 @@ plot_html(model, output_file, title, visual_pruning, color_palette,
 from __future__ import annotations
 
 import json
+
+import numpy as np
 from pathlib import Path
 from typing import Tuple
 
@@ -96,11 +98,29 @@ def _serialize_lift(lift):
     """
     if lift is None:
         return None
+
+    def _num(v):
+        v = float(v)
+        return None if v != v else round(v, 4)   # NaN (class absent) -> null
+
     if isinstance(lift, list):
         # Stratified: list of numpy arrays
-        return [[round(float(v), 4) for v in arr] for arr in lift]
+        return [[_num(v) for v in arr] for arr in lift]
     # Shared: single numpy array
-    return [round(float(v), 4) for v in lift]
+    return [_num(v) for v in lift]
+
+
+def _serialize_lcr(node):
+    """LCR per stratum (Eq. 5) of a leaf, as list[list[float|None]]."""
+    lcr = getattr(node, "LCR", None)
+    if lcr is None or getattr(node, "strat_labels", None) is None:
+        return None
+    return _serialize_lift(list(lcr))
+
+
+def _strat_labels(node):
+    sl = getattr(node, "strat_labels", None)
+    return None if sl is None else [str(v) for v in np.asarray(sl).tolist()]
 
 
 # ============================================================
@@ -135,6 +155,8 @@ def _recurse_vp(node: Node):
             "tree_partial_impurity_reduction": float(node.tree_partial_impurity_reduction),
             "labArray":                        node.labels.tolist(),
             "gcr":                             gcr,
+            "lcr":                             _serialize_lcr(node),
+            "strat_labels":                    _strat_labels(node),
             "y_stats":                         node.y_stats,
         }
 
@@ -154,7 +176,7 @@ def _recurse_vp(node: Node):
         "tree_partial_impurity_reduction": float(node.tree_partial_impurity_reduction),
         "labels":                          int(node.N),
         "labArray":                        node.labels.tolist(),
-        "strat_labels":                    node.strat_labels.tolist() if node.strat_labels is not None else None,
+        "strat_labels":                    _strat_labels(node),
         "lift1":                           _serialize_lift(node.LIFT_1),
         "lift2":                           _serialize_lift(node.LIFT_2),
         "y_stats":                         node.y_stats,
@@ -190,6 +212,8 @@ def _recurse_std(node: Node, depth: int = 0):
             "depth":        depth,
             "labArray":     node.labels.tolist(),
             "gcr":          gcr,
+            "lcr":          _serialize_lcr(node),
+            "strat_labels": _strat_labels(node),
             "y_stats":      node.y_stats,
         }
 
@@ -207,7 +231,7 @@ def _recurse_std(node: Node, depth: int = 0):
         "labels":       int(node.N),
         "depth":        depth,
         "labArray":     node.labels.tolist(),
-        "strat_labels": node.strat_labels.tolist() if node.strat_labels is not None else None,
+        "strat_labels": _strat_labels(node),
         "lift1":        _serialize_lift(node.LIFT_1),
         "lift2":        _serialize_lift(node.LIFT_2),
         "y_stats":      node.y_stats,
@@ -444,21 +468,22 @@ def _js_common():
         // ---- LIFT formatting helper ----
         // Stratified ("A", "none"):  lift = [[s0_c0, s0_c1, ...], [s1_c0, ...], ...]
         // Shared ("B", "AB"):        lift = [c0, c1, ...]
-        function fmtLift(lift, labArray, stratLabels, side) {
+        function fmtLift(lift, labArray, stratLabels, side, name) {
+            const head = "\\n" + (name || "LIFT") + (side ? " " + side : "");
             if (!lift || lift.length === 0) return "";
             if (Array.isArray(lift[0])) {
                 // Stratified
                 let out = "";
                 for (let t = 0; t < lift.length; t++) {
                     const sl   = stratLabels ? stratLabels[t] : t;
-                    const vals = labArray.map((lbl, i) => lbl + "=" + lift[t][i].toFixed(3)).join(", ");
-                    out += "\\nLIFT " + side + " [s=" + sl + "]: [" + vals + "]";
+                    const vals = labArray.map((lbl, i) => lbl + "=" + (lift[t][i] === null ? "-" : lift[t][i].toFixed(3))).join(", ");
+                    out += head + " [s=" + sl + "]: [" + vals + "]";
                 }
                 return out;
             } else {
                 // Shared
-                const vals = labArray.map((lbl, i) => lbl + "=" + lift[i].toFixed(3)).join(", ");
-                return "\\nLIFT " + side + ": [" + vals + "]";
+                const vals = labArray.map((lbl, i) => lbl + "=" + (lift[i] === null ? "-" : lift[i].toFixed(3))).join(", ");
+                return head + ": [" + vals + "]";
             }
         }
 
@@ -486,7 +511,7 @@ def _js_common():
                 }
             } else {
                 if (node.isLeaf == 1) {
-                    text = "Id: " + node.position + "\\nN: " + node.labels + "\\nDistribution: [" + node.distribution + "]\\nGCR: [" + node.gcr + "]\\nImpurity: " + node.impurity.toFixed(3) + "\\nPrediction: " + node.value;
+                    text = "Id: " + node.position + "\\nN: " + node.labels + "\\nDistribution: [" + node.distribution + "]\\nGCR: [" + node.gcr + "]" + fmtLift(node.lcr, node.labArray, node.strat_labels, "", "LCR") + "\\nImpurity: " + node.impurity.toFixed(3) + "\\nPrediction: " + node.value;
                 } else {
                     const liftText = fmtLift(node.lift1, node.labArray, node.strat_labels, "sx")
                                    + fmtLift(node.lift2, node.labArray, node.strat_labels, "dx");

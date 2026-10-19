@@ -137,7 +137,7 @@ class SLBTAdaBoostForest:
                 **self.tree_kwargs,
             )
             tree.fit(X, y, x_s=x_s, sample_weight=sample_weight)
-            preds = tree.predict(X)
+            preds = tree.predict(X, x_s=x_s)
 
             # ── 2. Weighted error ε_t ────────────────────────────────
             incorrect = (preds != y.values).astype(np.float64)
@@ -183,13 +183,13 @@ class SLBTAdaBoostForest:
             print(f"AdaBoost-SLBT: {len(self.estimators_)} weak learners fitted.")
         return self
 
-    def predict(self, X: pd.DataFrame) -> np.ndarray:
+    def predict(self, X: pd.DataFrame, x_s=None) -> np.ndarray:
         """Weighted majority-vote prediction across all weak learners."""
         self._check_fitted()
-        votes = self._compute_vote_matrix(X)
+        votes = self._compute_vote_matrix(X, x_s)
         return self.classes_[np.argmax(votes, axis=1)]
 
-    def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
+    def predict_proba(self, X: pd.DataFrame, x_s=None) -> np.ndarray:
         """
         Class probability as normalised weighted votes.
 
@@ -199,12 +199,12 @@ class SLBTAdaBoostForest:
             Columns ordered as ``self.classes_``.
         """
         self._check_fitted()
-        votes    = self._compute_vote_matrix(X)
+        votes    = self._compute_vote_matrix(X, x_s)
         row_sums = votes.sum(axis=1, keepdims=True)
         row_sums[row_sums == 0] = 1
         return votes / row_sums
 
-    def staged_predict(self, X: pd.DataFrame):
+    def staged_predict(self, X: pd.DataFrame, x_s=None):
         """
         Generator that yields predictions after each boosting stage.
         Useful for selecting the optimal number of estimators.
@@ -215,7 +215,7 @@ class SLBTAdaBoostForest:
         class_to_idx = {c: i for i, c in enumerate(self.classes_)}
         votes        = np.zeros((n_samples, n_classes))
         for tree, alpha in zip(self.estimators_, self.estimator_weights_):
-            preds = tree.predict(X)
+            preds = tree.predict(X, x_s=x_s)
             for i, pred in enumerate(preds):
                 if pred in class_to_idx:
                     votes[i, class_to_idx[pred]] += alpha
@@ -271,13 +271,13 @@ class SLBTAdaBoostForest:
     #  PRIVATE
     # ================================================================
 
-    def _compute_vote_matrix(self, X: pd.DataFrame) -> np.ndarray:
+    def _compute_vote_matrix(self, X: pd.DataFrame, x_s=None) -> np.ndarray:
         n_samples    = len(X)
         n_classes    = len(self.classes_)
         class_to_idx = {c: i for i, c in enumerate(self.classes_)}
         votes        = np.zeros((n_samples, n_classes))
         for tree, alpha in zip(self.estimators_, self.estimator_weights_):
-            preds = tree.predict(X)
+            preds = tree.predict(X, x_s=x_s)
             for i, pred in enumerate(preds):
                 if pred in class_to_idx:
                     votes[i, class_to_idx[pred]] += alpha

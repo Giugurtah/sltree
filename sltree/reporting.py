@@ -45,6 +45,8 @@ class NodeRecord:
     gcr: Any                 # None or list of floats
     lift_left: Any           # None (PredictabilityTree) or list/nested list (SLBT)
     lift_right: Any
+    lcr: Any = None          # SLBT leaves: {stratum: [LCR per class]} (Eq. 5)
+    als_diag: Any = None     # SLBT internal nodes: convergence of the SLBM fit
 
 
 class TreeReporter:
@@ -76,6 +78,7 @@ class TreeReporter:
                 "id", "node_type", "feature", "threshold", "N",
                 "impurity", "distribution", "labels",
                 "gpi", "pi", "gcr", "lift_left", "lift_right",
+                "lcr", "als_diag",
             ])
         return pd.DataFrame(asdict(r) for r in self._records)
 
@@ -119,6 +122,8 @@ class TreeReporter:
             gcr         = gcr,
             lift_left   = lift_left,
             lift_right  = lift_right,
+            lcr         = self._extract_lcr(node),
+            als_diag    = getattr(node, "als_diag", None),
         )
         self._records.append(rec)
 
@@ -132,17 +137,29 @@ class TreeReporter:
             return None
 
         strat_labels = getattr(node, "strat_labels", None)
-        if strat_labels is None:
-            # PredictabilityTree / SLBT homogeneity A or AB — flat list
+        stratified = isinstance(thr, list) and all(
+            isinstance(v, (np.ndarray, list, tuple)) for v in thr
+        )
+        if strat_labels is None or not stratified:
+            # PredictabilityTree / SLBT homogeneity A or AB — one flat list.
+            # (Mapping a flat threshold onto the strata, as earlier versions
+            # did, split each value into its characters.)
             if isinstance(thr, (np.ndarray, list, tuple)):
-                return list(thr)
+                return self._to_python(list(thr))
             return thr
 
         # SLBT none / B — mapping  stratum → [values]
-        try:
-            return {str(s): list(v) for s, v in zip(list(strat_labels), thr)}
-        except TypeError:
-            return str(thr)
+        return {str(s): self._to_python(list(v)) for s, v in zip(list(strat_labels), thr)}
+
+    def _extract_lcr(self, node: Node) -> Any:
+        lcr = getattr(node, "LCR", None)
+        strat_labels = getattr(node, "strat_labels", None)
+        if lcr is None or strat_labels is None:
+            return None
+        return {
+            str(s): self._round_nested(self._to_python(v))
+            for s, v in zip(list(strat_labels), lcr)
+        }
 
     def _extract_lift(self, node: Node):
         L1 = getattr(node, "LIFT_1", None)
@@ -161,9 +178,12 @@ class TreeReporter:
             return x.tolist()
         if isinstance(x, (list, tuple)):
             return [
-                v.tolist() if isinstance(v, np.ndarray) else v
+                v.tolist() if isinstance(v, np.ndarray)
+                else (v.item() if isinstance(v, np.generic) else v)
                 for v in x
             ]
+        if isinstance(x, np.generic):
+            return x.item()
         return x
 
     def _round_nested(self, x: Any) -> Any:
@@ -171,8 +191,9 @@ class TreeReporter:
         d = self.decimals
         if x is None:
             return None
-        if isinstance(x, (float, int)):
-            return round(float(x), d)
+        if isinstance(x, (float, int)) and not isinstance(x, bool):
+            x = float(x)
+            return None if np.isnan(x) else round(x, d)
         if isinstance(x, np.ndarray):
             return [self._round_nested(v) for v in x.tolist()]
         if isinstance(x, (list, tuple)):

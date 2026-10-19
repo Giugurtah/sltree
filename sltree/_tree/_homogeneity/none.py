@@ -11,6 +11,7 @@
 from __future__ import annotations
 import numpy as np
 from .base import HomogeneityStrategy
+from .._stratified import safe_ratio
 from ..split import _splitS
 
 
@@ -37,9 +38,15 @@ class HomogeneityNone(HomogeneityStrategy):
     def split(self, X_best, x_s, thresholds):
         return _splitS(X_best, x_s, thresholds)
 
-    def compute_lift(self, beta, distribution):
-        lift1, lift2 = [], []
-        for t in range(len(beta)):
-            lift1.append(np.array([b[0] for b in beta[t]]) / distribution)
-            lift2.append(np.array([b[1] for b in beta[t]]) / distribution)
+    def compute_lift(self, beta, strat_dist):
+        """
+        Lift (Eq. 4): beta_{j|k(g)} / p_{j|(g)}, one array per stratum.
+
+        ``strat_dist`` has one row per stratum present at the node: the class
+        distribution of that stratum, p_{j|(g)}(t), which is the prior of
+        Eq. 4.  Each stratum has its own latent budgets here.
+        """
+        beta = np.asarray(beta)
+        lift1 = [safe_ratio(beta[t][:, 0], strat_dist[t]) for t in range(len(beta))]
+        lift2 = [safe_ratio(beta[t][:, 1], strat_dist[t]) for t in range(len(beta))]
         return lift1, lift2

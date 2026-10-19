@@ -210,37 +210,74 @@ def test_free_alpha_finds_a_split_that_reverses_between_strata(homogeneity):
     assert set(threshold[0]) != set(threshold[1])
 
 
-@pytest.mark.parametrize("homogeneity", ["A", "AB"])
-def test_shared_alpha_cannot_see_the_inversion(homogeneity):
-    """The other half of the argument.
+def test_shared_alpha_finds_the_split_but_cannot_regroup_the_outcome():
+    """'A' shares the partition, not the response profiles.
 
-    'A' and 'AB' impose one split direction across strata, so the inverted
-    predictor looks like noise to them.  Without this half, the test above would
-    only show that SLBT works, not that the free-alpha setting is *needed*.
+    The Predictability Improvement is the partial tau of Gray and Williams
+    (Eq. 1) computed on the split, i.e. it is evaluated *within* each stratum.
+    Within each stratum {a} | {b} separates the classes perfectly, so the
+    shared split scores PI = 1 under 'A' as well: the latent budgets of 'A' are
+    stratum-specific and represent "same split, opposite profiles" exactly.
+
+    What 'A' cannot do is send the same outcome to the same child: the left
+    child holds class A in one stratum and class B in the other.  That is the
+    difference with 'none' / 'B' (test above), whose stratum-specific
+    thresholds put the same outcome together.
+
+    (Earlier versions computed PI as tau(parent) - (L tau_left + R tau_right),
+    which is not tau_{Y|s,Z} and scored this split near 0.)
     """
     X, y, stratum = _inverted_data()
 
     with _quiet():
-        model = SLBT(homogeneity=homogeneity, max_depth=2, feats_viewed=2,
+        model = SLBT(homogeneity="A", max_depth=2, feats_viewed=2,
                      random_state=0)
         model.fit(X, y, stratum)
 
-    assert model.root.pi < 0.1, \
-        "a constrained model should find almost no signal here"
+    root = model.root
+    assert root.feature == "inverted"
+    assert root.pi == pytest.approx(1.0, abs=1e-6)
+    assert isinstance(root.treshold, np.ndarray) and root.treshold.ndim == 1
+
+    left = root.left
+    majority = [left.labels[np.argmax(d)] for d in left.strat_distribution]
+    assert majority[0] != majority[1], \
+        "the shared split sends opposite outcomes of the two strata left"
 
 
-def test_predict_ignores_the_stratum_and_loses_the_inverted_split():
-    """A capability gap, asserted so that it is visible rather than forgotten.
+def test_fully_shared_model_cannot_represent_the_inversion():
+    """'AB' shares the budgets too: the inverted budgets cannot be reproduced.
 
-    SLBT.predict(X) takes no stratum.  When thresholds are stratified — the
-    'none' and 'B' settings — _traverse_tree falls back to the union of the
-    per-stratum modality sets.  For an inversion that union is every modality,
-    so the split collapses and prediction drops to chance, even though the tree
-    found the structure perfectly (PI = 1 in the test above).
+    Checked on the least-squares fit itself.  The four observed budgets are
+    (1,0), (0,1) in stratum 0 and (0,1), (1,0) in stratum 1; with A and B shared
+    the best the model can do is (0.5, 0.5) everywhere, a loss of 4 x 0.5 = 2.
+    The models with stratum-specific budgets reproduce them exactly.
+    """
+    from sltree._utils.utils import _stratified_contingency
+    from sltree._tree.split import score_slbt
 
-    Feeding each row its own stratum recovers perfect accuracy, which is what
-    the second half measures.  The test documents the gap; closing it means
-    giving predict() an x_s argument.
+    X, y, stratum = _inverted_data()
+    Fs_noN = _stratified_contingency(X["inverted"], y, stratum, norm=False)
+    Fs     = _stratified_contingency(X["inverted"], y, stratum, norm=True)
+
+    loss = {}
+    for h in ("none", "A", "B", "AB"):
+        *_, diag = score_slbt(Fs_noN, Fs, h, seed=0, n_init=5)
+        loss[h] = diag["loss"]
+
+    assert loss["AB"] == pytest.approx(2.0, abs=1e-6)
+    for h in ("none", "A", "B"):
+        assert loss[h] == pytest.approx(0.0, abs=1e-6), h
+
+
+def test_predict_uses_the_stratum_of_each_row():
+    """Stratum-specific splits need the stratum at prediction time.
+
+    Earlier versions took no stratum and fell back to the union of the
+    per-stratum modality sets: for an inversion that union is every modality,
+    so the split collapsed and accuracy dropped to chance although the tree had
+    found the structure.  predict() now routes each row with the threshold of
+    its own stratum, and refuses to guess when the stratum is missing.
     """
     X, y, stratum = _inverted_data()
 
@@ -249,26 +286,24 @@ def test_predict_ignores_the_stratum_and_loses_the_inverted_split():
                      random_state=0)
         model.fit(X, y, stratum)
 
-    blind = (model.predict(X) == y.values).mean()
+    assert (model.predict(X, x_s=stratum) == y.values).mean() == pytest.approx(1.0)
 
-    def traverse_with_stratum(row, s, node):
-        if node.left is None:
-            return node.value
-        threshold = node.treshold
-        if isinstance(threshold, np.ndarray) and threshold.ndim == 1:
-            goes_left = row[node.feature] in threshold
-        else:
-            goes_left = row[node.feature] in threshold[s]
-        return traverse_with_stratum(row, s, node.left if goes_left else node.right)
+    with pytest.raises(ValueError, match="stratum"):
+        model.predict(X)
 
-    informed = np.mean([
-        traverse_with_stratum(X.iloc[i], stratum[i], model.root) == y.iloc[i]
-        for i in range(len(y))
-    ])
 
-    assert blind < 0.6, "prediction without the stratum should be near chance"
-    assert informed == pytest.approx(1.0), \
-        "the same tree, given the stratum, classifies perfectly"
+def test_unseen_values_go_to_the_larger_child():
+    """A modality never seen at a node carries no information on its side."""
+    X, y, stratum = _inverted_data()
+    with _quiet():
+        model = SLBT(homogeneity="A", max_depth=1, feats_viewed=2,
+                     random_state=0)
+        model.fit(X, y, stratum)
+    root = model.root
+    larger = root.left if root.left.N >= root.right.N else root.right
+    X_new = X.iloc[:3].copy()
+    X_new["inverted"] = "zzz"
+    assert set(model.apply(X_new, x_s=stratum[:3])) == {larger.position}
 
 
 # ------------------------------------------------------------------ #

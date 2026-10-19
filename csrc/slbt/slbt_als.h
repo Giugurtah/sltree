@@ -14,6 +14,9 @@
 
 #include "lbrandom.h"
 
+/* Number of diagnostics written by slba_C_execute into diag_out. */
+#define SLBA_NDIAG 7
+
 void slba_C_execute(
     int I,
     int J,
@@ -23,7 +26,13 @@ void slba_C_execute(
     const double *Fs,
     double *out_alpha,
     double *out_beta,
-    uint64_t seed        /* seeds the ALS random initialisation */
+    uint64_t seed,       /* seeds the random initialisation                */
+    int n_init,          /* number of random starts; the best one is kept  */
+    int max_iter,        /* iteration cap per start                        */
+    double tol,          /* relative-decrease tolerance                    */
+    int optimizer,       /* 0 = softmax gradient (Eq. 16-19),
+                            1 = projected gradient on the simplex          */
+    double *diag_out     /* SLBA_NDIAG diagnostics, may be NULL            */
 );
 
 #endif

@@ -233,7 +233,7 @@ class SLBTForest:
             # 4. OOB predictions
             if self.bootstrap and len(oob_idx) > 0:
                 X_oob  = X.iloc[oob_idx][feat_names].reset_index(drop=True)
-                preds  = tree.predict(X_oob)
+                preds  = tree.predict(X_oob, x_s=x_s_arr[oob_idx])
                 for local_i, global_i in enumerate(oob_idx):
                     oob_preds[global_i].append(preds[local_i])
 
@@ -248,20 +248,21 @@ class SLBTForest:
 
         return self
 
-    def predict(self, X: pd.DataFrame) -> np.ndarray:
+    def predict(self, X: pd.DataFrame, x_s=None) -> np.ndarray:
         """
-        Majority-vote prediction across all trees.
+        Majority-vote prediction across all trees.  ``x_s`` (stratum of each
+        row) is required when the trees have stratum-specific splits.
         """
         self._check_fitted()
         votes = [Counter() for _ in range(len(X))]
         for tree, feat_names in zip(self.estimators_, self.estimators_features_):
             available = [f for f in feat_names if f in X.columns]
-            preds     = tree.predict(X[available].reset_index(drop=True))
+            preds     = tree.predict(X[available].reset_index(drop=True), x_s=x_s)
             for i, pred in enumerate(preds):
                 votes[i][pred] += 1
         return np.array([v.most_common(1)[0][0] for v in votes])
 
-    def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
+    def predict_proba(self, X: pd.DataFrame, x_s=None) -> np.ndarray:
         """
         Class probability as vote fraction.
 
@@ -278,7 +279,7 @@ class SLBTForest:
 
         for tree, feat_names in zip(self.estimators_, self.estimators_features_):
             available = [f for f in feat_names if f in X.columns]
-            preds     = tree.predict(X[available].reset_index(drop=True))
+            preds     = tree.predict(X[available].reset_index(drop=True), x_s=x_s)
             for i, pred in enumerate(preds):
                 if pred in class_to_idx:
                     proba[i, class_to_idx[pred]] += 1

@@ -1,744 +1,727 @@
 {
- "_meta": {
-  "data": "fixed seeds, see the generator in test_cross_platform.py",
-  "note": "Generated once on Linux/gcc. These values must be identical on macOS and Windows: see tests/test_cross_platform.py."
- },
- "kmeans_labels": {
-  "0": [
-   1,
-   1,
-   1,
-   1,
-   1,
-   2,
-   2,
-   2,
-   2,
-   2,
-   0,
-   0,
-   0,
-   0,
-   0,
-   0,
-   3,
-   3,
-   3,
-   3
+  "_meta": {
+    "data": "fixed seeds, see the generator in test_cross_platform.py",
+    "note": "Generated once on Linux/gcc. These values must be identical on macOS and Windows: see tests/test_cross_platform.py.",
+    "note_slbt_none": "Regenerated on Linux/gcc on 2026-10-14 after the revision of the SLBT split: PI is now tau_{Y|s,Z} on the split table, components are aligned across strata in the unconstrained model, and the least-squares fit uses monotone descent with a relative tolerance. The predictability_tree and kmeans snapshots are unchanged."
+  },
+  "kmeans_labels": {
+    "0": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      3,
+      3,
+      3,
+      3
+    ],
+    "1": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      3,
+      3,
+      3,
+      3,
+      3,
+      2,
+      2,
+      2,
+      2,
+      1,
+      1,
+      1,
+      1
+    ],
+    "42": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      3,
+      3,
+      3,
+      3
+    ]
+  },
+  "predictability_tree": [
+    {
+      "N": 240,
+      "feature": "x1",
+      "gpi": 0.338551802227,
+      "impurity": 0.497777777778,
+      "impurity_decrease": 0.0,
+      "pi": 0.291193685383,
+      "position": 1
+    },
+    {
+      "N": 119,
+      "feature": "x0",
+      "gpi": 0.284722222222,
+      "impurity": 0.322011157404,
+      "impurity_decrease": 0.679246698679,
+      "pi": 0.226851851852,
+      "position": 2
+    },
+    {
+      "N": 28,
+      "feature": "x1",
+      "gpi": 0.342804111936,
+      "impurity": 0.5,
+      "impurity_decrease": 0.8828125,
+      "pi": 0.342804111936,
+      "position": 4
+    },
+    {
+      "N": 19,
+      "feature": "x3",
+      "gpi": 0.353617308993,
+      "impurity": 0.432132963989,
+      "impurity_decrease": 0.931273496241,
+      "pi": 0.298174442191,
+      "position": 8
+    },
+    {
+      "N": 11,
+      "feature": "x2",
+      "gpi": 0.142857142857,
+      "impurity": 0.165289256198,
+      "impurity_decrease": 0.984780844156,
+      "pi": 0.142857142857,
+      "position": 16
+    },
+    {
+      "N": 5,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.32,
+      "impurity_decrease": 0.986607142857,
+      "pi": null,
+      "position": 32
+    },
+    {
+      "N": 6,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "position": 33
+    },
+    {
+      "N": 8,
+      "feature": "x2",
+      "gpi": 0.542857142857,
+      "impurity": 0.46875,
+      "impurity_decrease": 0.968610491071,
+      "pi": 0.466666666667,
+      "position": 17
+    },
+    {
+      "N": 7,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.408163265306,
+      "impurity_decrease": 0.976084183673,
+      "pi": null,
+      "position": 34
+    },
+    {
+      "N": 1,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "position": 35
+    },
+    {
+      "N": 9,
+      "feature": "x3",
+      "gpi": 0.428571428571,
+      "impurity": 0.197530864198,
+      "impurity_decrease": 0.985119047619,
+      "pi": 0.428571428571,
+      "position": 9
+    },
+    {
+      "N": 2,
+      "feature": "x2",
+      "gpi": 1.0,
+      "impurity": 0.5,
+      "impurity_decrease": 0.991629464286,
+      "pi": 1.0,
+      "position": 18
+    },
+    {
+      "N": 1,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "position": 36
+    },
+    {
+      "N": 1,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "position": 37
+    },
+    {
+      "N": 7,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "position": 19
+    },
+    {
+      "N": 91,
+      "feature": "x0",
+      "gpi": 0.16393442623,
+      "impurity": 0.195628547277,
+      "impurity_decrease": 0.850986067504,
+      "pi": 0.16393442623,
+      "position": 5
+    },
+    {
+      "N": 44,
+      "feature": "x1",
+      "gpi": 0.172388769331,
+      "impurity": 0.351239669421,
+      "impurity_decrease": 0.870637175325,
+      "pi": 0.172388769331,
+      "position": 10
+    },
+    {
+      "N": 21,
+      "feature": "x2",
+      "gpi": 0.2,
+      "impurity": 0.090702947846,
+      "impurity_decrease": 0.984056122449,
+      "pi": 0.2,
+      "position": 20
+    },
+    {
+      "N": 4,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.375,
+      "impurity_decrease": 0.987444196429,
+      "pi": null,
+      "position": 40
+    },
+    {
+      "N": 17,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "position": 41
+    },
+    {
+      "N": 23,
+      "feature": "x2",
+      "gpi": 0.298560549999,
+      "impurity": 0.476370510397,
+      "impurity_decrease": 0.908288043478,
+      "pi": 0.253252488601,
+      "position": 21
+    },
+    {
+      "N": 12,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.277777777778,
+      "impurity_decrease": 0.972098214286,
+      "pi": null,
+      "position": 42
+    },
+    {
+      "N": 11,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.462809917355,
+      "impurity_decrease": 0.957386363636,
+      "pi": null,
+      "position": 43
+    },
+    {
+      "N": 47,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "position": 11
+    },
+    {
+      "N": 121,
+      "feature": "x0",
+      "gpi": 0.57217197196,
+      "impurity": 0.396694214876,
+      "impurity_decrease": 0.598214285714,
+      "pi": 0.497087795157,
+      "position": 3
+    },
+    {
+      "N": 98,
+      "feature": "x0",
+      "gpi": 0.203193644322,
+      "impurity": 0.230112453145,
+      "impurity_decrease": 0.81123587828,
+      "pi": 0.201537713453,
+      "position": 6
+    },
+    {
+      "N": 61,
+      "feature": "x3",
+      "gpi": 0.047619047619,
+      "impurity": 0.032249395324,
+      "impurity_decrease": 0.983533372365,
+      "pi": 0.047619047619,
+      "position": 12
+    },
+    {
+      "N": 16,
+      "feature": "x2",
+      "gpi": 0.2,
+      "impurity": 0.1171875,
+      "impurity_decrease": 0.984305245536,
+      "pi": 0.2,
+      "position": 24
+    },
+    {
+      "N": 4,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.375,
+      "impurity_decrease": 0.987444196429,
+      "pi": null,
+      "position": 48
+    },
+    {
+      "N": 12,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "position": 49
+    },
+    {
+      "N": 45,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "position": 25
+    },
+    {
+      "N": 37,
+      "feature": "x1",
+      "gpi": 0.351661380966,
+      "impurity": 0.438276113952,
+      "impurity_decrease": 0.864261583012,
+      "pi": 0.351661380966,
+      "position": 13
+    },
+    {
+      "N": 18,
+      "feature": "x3",
+      "gpi": 0.388888888889,
+      "impurity": 0.475308641975,
+      "impurity_decrease": 0.928385416667,
+      "pi": 0.333333333333,
+      "position": 26
+    },
+    {
+      "N": 2,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "position": 52
+    },
+    {
+      "N": 16,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.4296875,
+      "impurity_decrease": 0.942452566964,
+      "pi": null,
+      "position": 53
+    },
+    {
+      "N": 19,
+      "feature": "x3",
+      "gpi": 0.272727272727,
+      "impurity": 0.09972299169,
+      "impurity_decrease": 0.984140037594,
+      "pi": 0.272727272727,
+      "position": 27
+    },
+    {
+      "N": 3,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.444444444444,
+      "impurity_decrease": 0.988839285714,
+      "pi": null,
+      "position": 54
+    },
+    {
+      "N": 16,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "position": 55
+    },
+    {
+      "N": 23,
+      "feature": "x2",
+      "gpi": 0.272727272727,
+      "impurity": 0.226843100189,
+      "impurity_decrease": 0.956327639752,
+      "pi": 0.272727272727,
+      "position": 7
+    },
+    {
+      "N": 14,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "position": 14
+    },
+    {
+      "N": 9,
+      "feature": "x3",
+      "gpi": 0.215384615385,
+      "impurity": 0.444444444444,
+      "impurity_decrease": 0.966517857143,
+      "pi": 0.192307692308,
+      "position": 15
+    },
+    {
+      "N": 2,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "position": 30
+    },
+    {
+      "N": 7,
+      "feature": "x1",
+      "gpi": 0.666666666667,
+      "impurity": 0.489795918367,
+      "impurity_decrease": 0.971301020408,
+      "pi": 0.666666666667,
+      "position": 31
+    },
+    {
+      "N": 5,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.32,
+      "impurity_decrease": 0.986607142857,
+      "pi": null,
+      "position": 62
+    },
+    {
+      "N": 2,
+      "feature": null,
+      "gpi": null,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "position": 63
+    }
   ],
-  "1": [
-   0,
-   0,
-   0,
-   0,
-   0,
-   0,
-   0,
-   3,
-   3,
-   3,
-   3,
-   3,
-   2,
-   2,
-   2,
-   2,
-   1,
-   1,
-   1,
-   1
-  ],
-  "42": [
-   1,
-   1,
-   1,
-   1,
-   1,
-   2,
-   2,
-   2,
-   2,
-   2,
-   0,
-   0,
-   0,
-   0,
-   0,
-   0,
-   3,
-   3,
-   3,
-   3
+  "slbt_none": [
+    {
+      "position": 1,
+      "feature": "x1",
+      "N": 240,
+      "impurity": 0.497777777778,
+      "impurity_decrease": 0.0,
+      "pi": 0.287868533576,
+      "gpi": 0.33117014892
+    },
+    {
+      "position": 2,
+      "feature": "x0",
+      "N": 121,
+      "impurity": 0.396694214876,
+      "impurity_decrease": 0.598214285714,
+      "pi": 0.409112057825,
+      "gpi": 0.504330361218
+    },
+    {
+      "position": 4,
+      "feature": "x0",
+      "N": 98,
+      "impurity": 0.230112453145,
+      "impurity_decrease": 0.81123587828,
+      "pi": 0.1946968533,
+      "gpi": 0.197562143327
+    },
+    {
+      "position": 8,
+      "feature": "x1",
+      "N": 37,
+      "impurity": 0.438276113952,
+      "impurity_decrease": 0.864261583012,
+      "pi": 0.391457347409,
+      "gpi": 0.391457347409
+    },
+    {
+      "position": 16,
+      "feature": null,
+      "N": 18,
+      "impurity": 0.475308641975,
+      "impurity_decrease": 0.928385416667,
+      "pi": null,
+      "gpi": null
+    },
+    {
+      "position": 17,
+      "feature": null,
+      "N": 19,
+      "impurity": 0.09972299169,
+      "impurity_decrease": 0.984140037594,
+      "pi": null,
+      "gpi": null
+    },
+    {
+      "position": 9,
+      "feature": "x3",
+      "N": 61,
+      "impurity": 0.032249395324,
+      "impurity_decrease": 0.983533372365,
+      "pi": 0.09765625,
+      "gpi": 0.09765625
+    },
+    {
+      "position": 18,
+      "feature": null,
+      "N": 53,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "gpi": null
+    },
+    {
+      "position": 19,
+      "feature": null,
+      "N": 8,
+      "impurity": 0.21875,
+      "impurity_decrease": 0.9853515625,
+      "pi": null,
+      "gpi": null
+    },
+    {
+      "position": 5,
+      "feature": "x3",
+      "N": 23,
+      "impurity": 0.226843100189,
+      "impurity_decrease": 0.956327639752,
+      "pi": 0.240562546262,
+      "gpi": 0.240562546262
+    },
+    {
+      "position": 10,
+      "feature": null,
+      "N": 14,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "gpi": null
+    },
+    {
+      "position": 11,
+      "feature": "x2",
+      "N": 9,
+      "impurity": 0.444444444444,
+      "impurity_decrease": 0.966517857143,
+      "pi": 0.395061728395,
+      "gpi": 0.395061728395
+    },
+    {
+      "position": 22,
+      "feature": null,
+      "N": 6,
+      "impurity": 0.277777777778,
+      "impurity_decrease": 0.986049107143,
+      "pi": null,
+      "gpi": null
+    },
+    {
+      "position": 23,
+      "feature": null,
+      "N": 3,
+      "impurity": 0.444444444444,
+      "impurity_decrease": 0.988839285714,
+      "pi": null,
+      "gpi": null
+    },
+    {
+      "position": 3,
+      "feature": "x0",
+      "N": 119,
+      "impurity": 0.322011157404,
+      "impurity_decrease": 0.679246698679,
+      "pi": 0.220062245441,
+      "gpi": 0.25802702419
+    },
+    {
+      "position": 6,
+      "feature": "x1",
+      "N": 50,
+      "impurity": 0.4712,
+      "impurity_decrease": 0.802790178571,
+      "pi": 0.282354713844,
+      "gpi": 0.282354713844
+    },
+    {
+      "position": 12,
+      "feature": "x3",
+      "N": 19,
+      "impurity": 0.432132963989,
+      "impurity_decrease": 0.931273496241,
+      "pi": 0.299886621315,
+      "gpi": 0.355158730159
+    },
+    {
+      "position": 24,
+      "feature": null,
+      "N": 10,
+      "impurity": 0.18,
+      "impurity_decrease": 0.984933035714,
+      "pi": null,
+      "gpi": null
+    },
+    {
+      "position": 25,
+      "feature": null,
+      "N": 9,
+      "impurity": 0.493827160494,
+      "impurity_decrease": 0.962797619048,
+      "pi": null,
+      "gpi": null
+    },
+    {
+      "position": 13,
+      "feature": "x3",
+      "N": 31,
+      "impurity": 0.312174817898,
+      "impurity_decrease": 0.918994815668,
+      "pi": 0.398190045249,
+      "gpi": 0.43778280543
+    },
+    {
+      "position": 26,
+      "feature": null,
+      "N": 11,
+      "impurity": 0.495867768595,
+      "impurity_decrease": 0.954342532468,
+      "pi": null,
+      "gpi": null
+    },
+    {
+      "position": 27,
+      "feature": null,
+      "N": 20,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "gpi": null
+    },
+    {
+      "position": 7,
+      "feature": "x0",
+      "N": 69,
+      "impurity": 0.134425540853,
+      "impurity_decrease": 0.922360248447,
+      "pi": 0.141414141414,
+      "gpi": 0.141414141414
+    },
+    {
+      "position": 14,
+      "feature": "x3",
+      "N": 22,
+      "impurity": 0.351239669421,
+      "impurity_decrease": 0.935318587662,
+      "pi": 0.232664359862,
+      "gpi": 0.247254901961
+    },
+    {
+      "position": 28,
+      "feature": null,
+      "N": 17,
+      "impurity": 0.207612456747,
+      "impurity_decrease": 0.970456932773,
+      "pi": null,
+      "gpi": null
+    },
+    {
+      "position": 29,
+      "feature": null,
+      "N": 5,
+      "impurity": 0.48,
+      "impurity_decrease": 0.979910714286,
+      "pi": null,
+      "gpi": null
+    },
+    {
+      "position": 15,
+      "feature": null,
+      "N": 47,
+      "impurity": 0.0,
+      "impurity_decrease": 1.0,
+      "pi": null,
+      "gpi": null
+    }
   ]
- },
- "predictability_tree": [
-  {
-   "N": 240,
-   "feature": "x1",
-   "gpi": 0.338551802227,
-   "impurity": 0.497777777778,
-   "impurity_decrease": 0.0,
-   "pi": 0.291193685383,
-   "position": 1
-  },
-  {
-   "N": 119,
-   "feature": "x0",
-   "gpi": 0.284722222222,
-   "impurity": 0.322011157404,
-   "impurity_decrease": 0.679246698679,
-   "pi": 0.226851851852,
-   "position": 2
-  },
-  {
-   "N": 28,
-   "feature": "x1",
-   "gpi": 0.342804111936,
-   "impurity": 0.5,
-   "impurity_decrease": 0.8828125,
-   "pi": 0.342804111936,
-   "position": 4
-  },
-  {
-   "N": 19,
-   "feature": "x3",
-   "gpi": 0.353617308993,
-   "impurity": 0.432132963989,
-   "impurity_decrease": 0.931273496241,
-   "pi": 0.298174442191,
-   "position": 8
-  },
-  {
-   "N": 11,
-   "feature": "x2",
-   "gpi": 0.142857142857,
-   "impurity": 0.165289256198,
-   "impurity_decrease": 0.984780844156,
-   "pi": 0.142857142857,
-   "position": 16
-  },
-  {
-   "N": 5,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.32,
-   "impurity_decrease": 0.986607142857,
-   "pi": null,
-   "position": 32
-  },
-  {
-   "N": 6,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 33
-  },
-  {
-   "N": 8,
-   "feature": "x2",
-   "gpi": 0.542857142857,
-   "impurity": 0.46875,
-   "impurity_decrease": 0.968610491071,
-   "pi": 0.466666666667,
-   "position": 17
-  },
-  {
-   "N": 7,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.408163265306,
-   "impurity_decrease": 0.976084183673,
-   "pi": null,
-   "position": 34
-  },
-  {
-   "N": 1,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 35
-  },
-  {
-   "N": 9,
-   "feature": "x3",
-   "gpi": 0.428571428571,
-   "impurity": 0.197530864198,
-   "impurity_decrease": 0.985119047619,
-   "pi": 0.428571428571,
-   "position": 9
-  },
-  {
-   "N": 2,
-   "feature": "x2",
-   "gpi": 1.0,
-   "impurity": 0.5,
-   "impurity_decrease": 0.991629464286,
-   "pi": 1.0,
-   "position": 18
-  },
-  {
-   "N": 1,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 36
-  },
-  {
-   "N": 1,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 37
-  },
-  {
-   "N": 7,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 19
-  },
-  {
-   "N": 91,
-   "feature": "x0",
-   "gpi": 0.16393442623,
-   "impurity": 0.195628547277,
-   "impurity_decrease": 0.850986067504,
-   "pi": 0.16393442623,
-   "position": 5
-  },
-  {
-   "N": 44,
-   "feature": "x1",
-   "gpi": 0.172388769331,
-   "impurity": 0.351239669421,
-   "impurity_decrease": 0.870637175325,
-   "pi": 0.172388769331,
-   "position": 10
-  },
-  {
-   "N": 21,
-   "feature": "x2",
-   "gpi": 0.2,
-   "impurity": 0.090702947846,
-   "impurity_decrease": 0.984056122449,
-   "pi": 0.2,
-   "position": 20
-  },
-  {
-   "N": 4,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.375,
-   "impurity_decrease": 0.987444196429,
-   "pi": null,
-   "position": 40
-  },
-  {
-   "N": 17,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 41
-  },
-  {
-   "N": 23,
-   "feature": "x2",
-   "gpi": 0.298560549999,
-   "impurity": 0.476370510397,
-   "impurity_decrease": 0.908288043478,
-   "pi": 0.253252488601,
-   "position": 21
-  },
-  {
-   "N": 12,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.277777777778,
-   "impurity_decrease": 0.972098214286,
-   "pi": null,
-   "position": 42
-  },
-  {
-   "N": 11,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.462809917355,
-   "impurity_decrease": 0.957386363636,
-   "pi": null,
-   "position": 43
-  },
-  {
-   "N": 47,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 11
-  },
-  {
-   "N": 121,
-   "feature": "x0",
-   "gpi": 0.57217197196,
-   "impurity": 0.396694214876,
-   "impurity_decrease": 0.598214285714,
-   "pi": 0.497087795157,
-   "position": 3
-  },
-  {
-   "N": 98,
-   "feature": "x0",
-   "gpi": 0.203193644322,
-   "impurity": 0.230112453145,
-   "impurity_decrease": 0.81123587828,
-   "pi": 0.201537713453,
-   "position": 6
-  },
-  {
-   "N": 61,
-   "feature": "x3",
-   "gpi": 0.047619047619,
-   "impurity": 0.032249395324,
-   "impurity_decrease": 0.983533372365,
-   "pi": 0.047619047619,
-   "position": 12
-  },
-  {
-   "N": 16,
-   "feature": "x2",
-   "gpi": 0.2,
-   "impurity": 0.1171875,
-   "impurity_decrease": 0.984305245536,
-   "pi": 0.2,
-   "position": 24
-  },
-  {
-   "N": 4,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.375,
-   "impurity_decrease": 0.987444196429,
-   "pi": null,
-   "position": 48
-  },
-  {
-   "N": 12,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 49
-  },
-  {
-   "N": 45,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 25
-  },
-  {
-   "N": 37,
-   "feature": "x1",
-   "gpi": 0.351661380966,
-   "impurity": 0.438276113952,
-   "impurity_decrease": 0.864261583012,
-   "pi": 0.351661380966,
-   "position": 13
-  },
-  {
-   "N": 18,
-   "feature": "x3",
-   "gpi": 0.388888888889,
-   "impurity": 0.475308641975,
-   "impurity_decrease": 0.928385416667,
-   "pi": 0.333333333333,
-   "position": 26
-  },
-  {
-   "N": 2,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 52
-  },
-  {
-   "N": 16,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.4296875,
-   "impurity_decrease": 0.942452566964,
-   "pi": null,
-   "position": 53
-  },
-  {
-   "N": 19,
-   "feature": "x3",
-   "gpi": 0.272727272727,
-   "impurity": 0.09972299169,
-   "impurity_decrease": 0.984140037594,
-   "pi": 0.272727272727,
-   "position": 27
-  },
-  {
-   "N": 3,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.444444444444,
-   "impurity_decrease": 0.988839285714,
-   "pi": null,
-   "position": 54
-  },
-  {
-   "N": 16,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 55
-  },
-  {
-   "N": 23,
-   "feature": "x2",
-   "gpi": 0.272727272727,
-   "impurity": 0.226843100189,
-   "impurity_decrease": 0.956327639752,
-   "pi": 0.272727272727,
-   "position": 7
-  },
-  {
-   "N": 14,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 14
-  },
-  {
-   "N": 9,
-   "feature": "x3",
-   "gpi": 0.215384615385,
-   "impurity": 0.444444444444,
-   "impurity_decrease": 0.966517857143,
-   "pi": 0.192307692308,
-   "position": 15
-  },
-  {
-   "N": 2,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 30
-  },
-  {
-   "N": 7,
-   "feature": "x1",
-   "gpi": 0.666666666667,
-   "impurity": 0.489795918367,
-   "impurity_decrease": 0.971301020408,
-   "pi": 0.666666666667,
-   "position": 31
-  },
-  {
-   "N": 5,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.32,
-   "impurity_decrease": 0.986607142857,
-   "pi": null,
-   "position": 62
-  },
-  {
-   "N": 2,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 63
-  }
- ],
- "slbt_none": [
-  {
-   "N": 240,
-   "feature": "x1",
-   "gpi": 0.33117014892,
-   "impurity": 0.497777777778,
-   "impurity_decrease": 0.0,
-   "pi": 0.315343999128,
-   "position": 1
-  },
-  {
-   "N": 121,
-   "feature": "x0",
-   "gpi": 0.504330361218,
-   "impurity": 0.396694214876,
-   "impurity_decrease": 0.598214285714,
-   "pi": 0.471863149166,
-   "position": 2
-  },
-  {
-   "N": 49,
-   "feature": "x0",
-   "gpi": 0.176156023907,
-   "impurity": 0.273219491878,
-   "impurity_decrease": 0.887937317784,
-   "pi": 0.140544463847,
-   "position": 4
-  },
-  {
-   "N": 15,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 8
-  },
-  {
-   "N": 34,
-   "feature": "x3",
-   "gpi": 0.168361581921,
-   "impurity": 0.359861591696,
-   "impurity_decrease": 0.897584033613,
-   "pi": 0.162604211052,
-   "position": 9
-  },
-  {
-   "N": 19,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.18836565097,
-   "impurity_decrease": 0.970042293233,
-   "pi": null,
-   "position": 18
-  },
-  {
-   "N": 15,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.48,
-   "impurity_decrease": 0.939732142857,
-   "pi": null,
-   "position": 19
-  },
-  {
-   "N": 72,
-   "feature": "x0",
-   "gpi": 0.152058261976,
-   "impurity": 0.453317901235,
-   "impurity_decrease": 0.726795014881,
-   "pi": 0.151337345371,
-   "position": 5
-  },
-  {
-   "N": 39,
-   "feature": "x1",
-   "gpi": 0.393445215363,
-   "impurity": 0.473372781065,
-   "impurity_decrease": 0.845467032967,
-   "pi": 0.393445215363,
-   "position": 10
-  },
-  {
-   "N": 20,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.18,
-   "impurity_decrease": 0.969866071429,
-   "pi": null,
-   "position": 20
-  },
-  {
-   "N": 19,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.432132963989,
-   "impurity_decrease": 0.931273496241,
-   "pi": null,
-   "position": 21
-  },
-  {
-   "N": 33,
-   "feature": "x3",
-   "gpi": 0.09765625,
-   "impurity": 0.058769513315,
-   "impurity_decrease": 0.983766233766,
-   "pi": 0.09765625,
-   "position": 11
-  },
-  {
-   "N": 8,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.21875,
-   "impurity_decrease": 0.9853515625,
-   "pi": null,
-   "position": 22
-  },
-  {
-   "N": 25,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 23
-  },
-  {
-   "N": 119,
-   "feature": "x0",
-   "gpi": 0.25802702419,
-   "impurity": 0.322011157404,
-   "impurity_decrease": 0.679246698679,
-   "pi": 0.240176064316,
-   "position": 3
-  },
-  {
-   "N": 35,
-   "feature": "x2",
-   "gpi": 0.466666666667,
-   "impurity": 0.408163265306,
-   "impurity_decrease": 0.880420918367,
-   "pi": 0.446688850713,
-   "position": 6
-  },
-  {
-   "N": 22,
-   "feature": "x3",
-   "gpi": 0.592592592593,
-   "impurity": 0.48347107438,
-   "impurity_decrease": 0.910967938312,
-   "pi": 0.526761871589,
-   "position": 12
-  },
-  {
-   "N": 18,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.5,
-   "impurity_decrease": 0.924665178571,
-   "pi": null,
-   "position": 24
-  },
-  {
-   "N": 4,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 25
-  },
-  {
-   "N": 13,
-   "feature": "x3",
-   "gpi": 1.0,
-   "impurity": 0.14201183432,
-   "impurity_decrease": 0.984546703297,
-   "pi": 1.0,
-   "position": 13
-  },
-  {
-   "N": 10,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 26
-  },
-  {
-   "N": 3,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.444444444444,
-   "impurity_decrease": 0.988839285714,
-   "pi": null,
-   "position": 27
-  },
-  {
-   "N": 84,
-   "feature": "x3",
-   "gpi": 0.164241622575,
-   "impurity": 0.277777777778,
-   "impurity_decrease": 0.8046875,
-   "pi": 0.160413793658,
-   "position": 7
-  },
-  {
-   "N": 44,
-   "feature": "x1",
-   "gpi": 0.205748689066,
-   "impurity": 0.267561983471,
-   "impurity_decrease": 0.901455965909,
-   "pi": 0.185561472179,
-   "position": 14
-  },
-  {
-   "N": 3,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.0,
-   "impurity_decrease": 1.0,
-   "pi": null,
-   "position": 28
-  },
-  {
-   "N": 41,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.176085663296,
-   "impurity_decrease": 0.939568815331,
-   "pi": null,
-   "position": 29
-  },
-  {
-   "N": 40,
-   "feature": "x0",
-   "gpi": 0.212739156269,
-   "impurity": 0.28875,
-   "impurity_decrease": 0.9033203125,
-   "pi": 0.212739156269,
-   "position": 15
-  },
-  {
-   "N": 22,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.351239669421,
-   "impurity_decrease": 0.935318587662,
-   "pi": null,
-   "position": 30
-  },
-  {
-   "N": 18,
-   "feature": null,
-   "gpi": null,
-   "impurity": 0.197530864198,
-   "impurity_decrease": 0.970238095238,
-   "pi": null,
-   "position": 31
-  }
- ]
 }

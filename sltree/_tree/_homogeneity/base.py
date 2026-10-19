@@ -65,18 +65,21 @@ class HomogeneityStrategy:
         """
         raise NotImplementedError
 
-    def compute_lift(self, beta, distribution):
+    def compute_lift(self, beta, strat_dist):
         """
-        Compute LIFT_1 and LIFT_2 from the SLBT beta output.
+        Compute LIFT_1 and LIFT_2 (Eq. 4) from the SLBT beta output.
 
         Parameters
         ----------
-        beta         : np.ndarray — beta output from ``score_slbt``
-        distribution : np.ndarray — relative class frequencies at the node
+        beta       : np.ndarray — beta output from ``score_slbt``
+        strat_dist : np.ndarray, shape (n_strata, n_classes) — class
+                     distribution within each stratum at the node, the prior
+                     p_{j|(g)}(t) of Eq. 4
 
         Returns
         -------
-        (lift1, lift2) : tuple
+        (lift1, lift2) : lists with one array per stratum (a flat array pair
+        when there is a single stratum and B is shared)
         """
         raise NotImplementedError
 

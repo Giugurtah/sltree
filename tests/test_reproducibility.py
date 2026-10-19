@@ -83,7 +83,7 @@ def test_slbt_forest_is_reproducible(X_small, y_small, strata_small, sampling):
         forest = SLBTForest(n_estimators=3, max_depth=2, feats_viewed=2,
                             random_state=0, **kwargs)
         forest.fit(X_small, y_small, strata_small)
-        preds.add(tuple(forest.predict(X_small)))
+        preds.add(tuple(forest.predict(X_small, x_s=strata_small)))
     assert len(preds) == 1
 
 
@@ -93,7 +93,7 @@ def test_slbt_adaboost_is_reproducible(X_small, y_small, strata_small):
         boost = SLBTAdaBoostForest(n_estimators=3, max_depth=2, feats_viewed=2,
                                    random_state=0)
         boost.fit(X_small, y_small, strata_small)
-        preds.add(tuple(boost.predict(X_small)))
+        preds.add(tuple(boost.predict(X_small, x_s=strata_small)))
     assert len(preds) == 1
 
 

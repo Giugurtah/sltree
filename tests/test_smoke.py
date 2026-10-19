@@ -52,13 +52,14 @@ def test_slbt_fits_under_every_homogeneity(X, y, strata, homogeneity):
     tree = SLBT(homogeneity=homogeneity, max_depth=4, feats_viewed=3,
                 random_state=0)
     tree.fit(X, y, strata)
-    assert len(tree.predict(X)) == len(y)
+    assert len(tree.predict(X, x_s=strata)) == len(y)
+    assert tree.predict_proba(X, x_s=strata).shape == (len(y), len(tree.classes_))
 
 
 def test_slbt_weighted_fits(X, y, strata, weights):
     tree = SLBTWeighted(max_depth=4, feats_viewed=3, random_state=0)
     tree.fit(X, y, strata, weights)
-    assert len(tree.predict(X)) == len(y)
+    assert len(tree.predict(X, x_s=strata)) == len(y)
 
 
 # ------------------------------------------------------------------ #
@@ -93,14 +94,14 @@ def test_slbt_forest_fits_on_both_branches(X, y, strata, sampling):
     forest = SLBTForest(n_estimators=4, max_depth=3, feats_viewed=2,
                         random_state=0, **kwargs)
     forest.fit(X, y, strata)
-    assert len(forest.predict(X)) == len(y)
+    assert len(forest.predict(X, x_s=strata)) == len(y)
 
 
 def test_slbt_adaboost_fits(X, y, strata):
     boost = SLBTAdaBoostForest(n_estimators=4, max_depth=3, feats_viewed=2,
                                random_state=0)
     boost.fit(X, y, strata)
-    assert len(boost.predict(X)) == len(y)
+    assert len(boost.predict(X, x_s=strata)) == len(y)
 
 
 # ------------------------------------------------------------------ #

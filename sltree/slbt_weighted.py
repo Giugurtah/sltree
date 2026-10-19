@@ -41,6 +41,9 @@ from ._utils.criteria import (
 from ._utils.utils import _stratified_contingency_weighted
 from ._tree.split  import score_slbt, _split, _splitS
 from ._tree._homogeneity.base import get_homogeneity_strategy
+from ._tree._stratified import (
+    strat_distribution, leaf_lcr, seen_modalities, traverse,
+)
 
 
 class SLBTWeighted(BaseTree):
@@ -61,6 +64,8 @@ class SLBTWeighted(BaseTree):
     max_depth : int, default 5
     feats_viewed : int, default 10
     FAST : bool, default True
+    n_init, ls_weights, epsilon, als_max_iter, als_tol, optimizer :
+        As in ``SLBT``.
     """
 
     def __init__(
@@ -75,6 +80,12 @@ class SLBTWeighted(BaseTree):
         FAST: bool             = True,
         rng                    = None,
         random_state: int | None = None,
+        n_init: int            = 1,
+        ls_weights: str        = "budget",
+        epsilon: float         = 0.01,
+        als_max_iter: int      = 5000,
+        als_tol: float         = 1e-12,
+        optimizer: str         = "softmax",
     ):
         super().__init__(
             min_ppi=min_ppi, min_gpi=min_gpi,
@@ -87,9 +98,28 @@ class SLBTWeighted(BaseTree):
                 f"homogeneity='{homogeneity}' not supported. "
                 "Choose from: 'none', 'A', 'B', 'AB'."
             )
+        if ls_weights not in ("budget", "frequency"):
+            raise ValueError(
+                f"ls_weights='{ls_weights}' not supported. "
+                "Choose from: 'budget', 'frequency'."
+            )
+        if int(n_init) < 1:
+            raise ValueError("n_init must be >= 1.")
         self.homogeneity  = homogeneity
         self._rng         = rng
         self.random_state = random_state
+        self.n_init       = int(n_init)
+        self.ls_weights   = ls_weights
+        self.epsilon      = float(epsilon)
+        self.als_max_iter = int(als_max_iter)
+        self.als_tol      = float(als_tol)
+        if optimizer not in ("softmax", "projected"):
+            raise ValueError(
+                f"optimizer='{optimizer}' not supported. "
+                "Choose from: 'softmax', 'projected'."
+            )
+        self.optimizer    = optimizer
+        self.strata_      = None
 
 
     def _next_als_seed(self) -> int:
@@ -126,6 +156,12 @@ class SLBTWeighted(BaseTree):
         p = super().get_params(deep)
         p["homogeneity"]  = self.homogeneity
         p["random_state"] = self.random_state
+        p["n_init"]       = self.n_init
+        p["ls_weights"]   = self.ls_weights
+        p["epsilon"]      = self.epsilon
+        p["als_max_iter"] = self.als_max_iter
+        p["als_tol"]      = self.als_tol
+        p["optimizer"]    = self.optimizer
         p.pop("model", None)
         return p
 
@@ -170,6 +206,10 @@ class SLBTWeighted(BaseTree):
         if x_s is None:
             x_s              = np.zeros(n, dtype=int)
             self.homogeneity = "AB"
+            self.strata_     = None
+        else:
+            x_s          = np.asarray(x_s)
+            self.strata_ = np.unique(x_s)
 
         strategy = get_homogeneity_strategy(self.homogeneity)
 
@@ -177,6 +217,11 @@ class SLBTWeighted(BaseTree):
             np.unique(y),
             _distribution_weighted(y, sample_weight),
         ]
+        self.classes_ = self.targhet_dist[0]
+        self._root_strata, self._root_strat_dist = strat_distribution(
+            y, x_s, self.classes_, sample_weight
+        )
+        self.convergence_ = []
         self.root_N   = n
         self.reporter = TreeReporter(homogeneity=self.homogeneity, decimals=4)
 
@@ -190,12 +235,20 @@ class SLBTWeighted(BaseTree):
         self._calculate_tree_partial_impurity_reduction()
         return self
 
-    def predict(self, X: pd.DataFrame) -> np.ndarray:
-        """Predict class labels for X."""
+    def predict(self, X: pd.DataFrame, x_s=None) -> np.ndarray:
+        """
+        Predict class labels for X.  ``x_s`` (stratum of each row) is
+        required when the tree has stratum-specific splits (homogeneity
+        "none" or "B" fitted with strata).
+        """
         if self.root is None:
             raise RuntimeError("Tree not fitted. Call fit() first.")
+        if x_s is None or self.strata_ is None:
+            strata = [None] * len(X)
+        else:
+            strata = list(np.asarray(x_s))
         return np.array([
-            self._traverse_tree(X.iloc[i], self.root)
+            traverse(self.root, X.iloc[i], strata[i]).value
             for i in range(len(X))
         ])
 
@@ -227,11 +280,13 @@ class SLBTWeighted(BaseTree):
             if root_impurity > 0 else 0.0
         )
 
+        node_strata, node_strat_dist = strat_distribution(y, x_s, np.unique(y), w)
+
         # --- pre-split stopping criteria ---
         leaf = self._check_criteria_before(
             y, w, pos, impurity, distribution, depth,
             n_labels, n_samples, n_feats,
-            impurity_decrease,
+            impurity_decrease, node_strata, node_strat_dist,
         )
         if leaf is not None:
             return leaf
@@ -240,7 +295,7 @@ class SLBTWeighted(BaseTree):
         gpi_vals, gpi_order = _gpi_stratified_weighted(X, y, x_s, w)
 
         # --- best split search ---
-        best_feature, best_treshold, best_pi, best_gpi, best_alpha, best_beta = (
+        best_feature, best_treshold, best_pi, best_gpi, best_alpha, best_beta, best_diag = (
             self._find_best_predictor(X, y, x_s, w, gpi_order, gpi_vals)
         )
 
@@ -248,7 +303,7 @@ class SLBTWeighted(BaseTree):
         leaf = self._check_criteria_after(
             y, w, pos, impurity, distribution, depth,
             best_gpi, best_pi,
-            impurity_decrease,
+            impurity_decrease, node_strata, node_strat_dist,
         )
         if leaf is not None:
             return leaf
@@ -256,7 +311,9 @@ class SLBTWeighted(BaseTree):
         x_vals    = np.unique(X[best_feature])
         thresholds = strategy.get_treshold_values(best_treshold, x_vals, x_s)
         indexL, indexR = strategy.split(X[best_feature], x_s, thresholds)
-        lift1, lift2   = strategy.compute_lift(best_beta, distribution)
+        lift1, lift2   = strategy.compute_lift(best_beta, node_strat_dist)
+        if best_diag is not None:
+            self.convergence_.append({"node": pos, "feature": best_feature, **best_diag})
 
         left  = self._grow_tree(
             strategy,
@@ -279,7 +336,10 @@ class SLBTWeighted(BaseTree):
             distribution=distribution, N=n_samples, labels=np.unique(y),
             LIFT_1=lift1, LIFT_2=lift2,
             GCR=None,
-            strat_labels=np.unique(x_s),
+            strat_labels=node_strata,
+            strat_distribution=node_strat_dist,
+            seen=seen_modalities(X[best_feature], x_s),
+            als_diag=best_diag,
         )
         if self.reporter is not None:
             self.reporter.add_node(node, is_leaf=False)
@@ -297,14 +357,18 @@ class SLBTWeighted(BaseTree):
             "gpi":       -np.inf,
             "alpha":     None,
             "beta":      None,
+            "diag":      None,
         }
 
         for rank, col in enumerate(gpi_order[: self.feats_viewed]):
             Fs_noN = _stratified_contingency_weighted(X[col], y, x_s, w, norm=False)
             Fs     = _stratified_contingency_weighted(X[col], y, x_s, w, norm=True)
 
-            pi, S, alpha, beta = score_slbt(
-                Fs_noN, Fs, self.homogeneity, self._next_als_seed()
+            pi, S, alpha, beta, diag = score_slbt(
+                Fs_noN, Fs, self.homogeneity, self._next_als_seed(),
+                n_init=self.n_init, ls_weights=self.ls_weights,
+                max_iter=self.als_max_iter, tol=self.als_tol,
+                optimizer=self.optimizer,
             )
 
             if pi > best["pi"]:
@@ -314,6 +378,7 @@ class SLBTWeighted(BaseTree):
                 best["alpha"]     = alpha
                 best["beta"]      = beta
                 best["gpi"]       = gpi_vals[rank]
+                best["diag"]      = diag
 
             if (self.FAST
                     and rank < len(gpi_order) - 1
@@ -327,6 +392,7 @@ class SLBTWeighted(BaseTree):
             best["gpi"],
             best["alpha"],
             best["beta"],
+            best["diag"],
         )
 
     # ================================================================
@@ -336,7 +402,7 @@ class SLBTWeighted(BaseTree):
     def _check_criteria_before(
         self, y, w, pos, impurity, distribution, depth,
         n_labels, n_samples, n_feats,
-        impurity_decrease,
+        impurity_decrease, node_strata=None, node_strat_dist=None,
     ):
         if (depth >= self.max_depth
                 or n_labels == 1
@@ -345,25 +411,25 @@ class SLBTWeighted(BaseTree):
                 or impurity  < self.min_impurity):
             return self._make_leaf(
                 y, w, pos, impurity, distribution,
-                impurity_decrease,
+                impurity_decrease, node_strata, node_strat_dist,
             )
         return None
 
     def _check_criteria_after(
         self, y, w, pos, impurity, distribution, depth,
         best_gpi, best_pi,
-        impurity_decrease,
+        impurity_decrease, node_strata=None, node_strat_dist=None,
     ):
         if best_gpi < self.min_gpi or best_pi < self.min_ppi or best_pi < 1e-8:
             return self._make_leaf(
                 y, w, pos, impurity, distribution,
-                impurity_decrease,
+                impurity_decrease, node_strata, node_strat_dist,
             )
         return None
 
     def _make_leaf(
         self, y, w, pos, impurity, distribution,
-        impurity_decrease,
+        impurity_decrease, node_strata=None, node_strat_dist=None,
     ) -> Node:
         # Weighted majority: class with highest total weight
         y_arr   = np.asarray(y)
@@ -382,7 +448,14 @@ class SLBTWeighted(BaseTree):
             N=len(y),
             labels=classes,
             GCR=self._get_gcr(distribution, classes),
+            strat_labels=node_strata,
+            strat_distribution=node_strat_dist,
         )
+        if node_strat_dist is not None:
+            leaf.LCR = leaf_lcr(
+                node_strata, classes, node_strat_dist,
+                self._root_strata, self.classes_, self._root_strat_dist,
+            )
         if self.reporter is not None:
             self.reporter.add_node(leaf, is_leaf=True)
         return leaf
@@ -391,18 +464,8 @@ class SLBTWeighted(BaseTree):
     #  PRIVATE — utilities (shared with SLBT)
     # ================================================================
 
-    def _traverse_tree(self, x: pd.Series, node: Node):
-        if node._is_leaf_node():
-            return node.value
-        treshold = node.treshold
-        if isinstance(treshold, np.ndarray) and treshold.ndim == 1:
-            goes_left = x[node.feature] in treshold
-        else:
-            union = {v for arr in treshold for v in arr}
-            goes_left = x[node.feature] in union
-        if goes_left:
-            return self._traverse_tree(x, node.left)
-        return self._traverse_tree(x, node.right)
+    def _traverse_tree(self, x: pd.Series, node: Node, s=None):
+        return traverse(node, x, s).value
 
     def _drop_constant_columns(self, X: pd.DataFrame) -> pd.DataFrame:
         return X.drop(columns=X.columns[X.nunique(dropna=False) <= 1])
@@ -444,7 +507,7 @@ class SLBTWeighted(BaseTree):
                 leaf.impurity_decrease * leaf.N / root_N
                 for leaf in virtual_leaves
             )
-            if part_imp_red - previous_part_imp_red < 0.01 and search:
+            if part_imp_red - previous_part_imp_red < self.epsilon and search:
                 current.suggested_pruning = True
                 search = False
             if current in virtual_leaves_set and not current._is_leaf_node():

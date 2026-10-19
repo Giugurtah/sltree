@@ -31,6 +31,9 @@ from ._utils.criteria import _gpi_stratified, _get_sizes
 from ._utils.utils    import _stratified_contingency
 from ._tree.split     import score_slbt, _split, _splitS
 from ._tree._homogeneity.base import get_homogeneity_strategy
+from ._tree._stratified import (
+    strat_distribution, leaf_lcr, seen_modalities, traverse,
+)
 
 
 class SLBT(BaseTree):
@@ -55,6 +58,29 @@ class SLBT(BaseTree):
         Top-GPI features evaluated per node.
     FAST : bool, default False
         Stop feature loop early when ``best_ppi > next_gpi``.
+    n_init : int, default 1
+        Random starts of the least-squares SLBM fit at every candidate
+        split; the start with the lowest loss is kept.  With 1 the fit starts
+        from the same matrices as earlier versions.  Values of 5-10 make the
+        split far less dependent on the random start.
+    ls_weights : {"budget", "frequency"}, default "budget"
+        Row weighting of the least-squares fit.  "budget": every observed
+        (stratum, category) budget weighs the same (behaviour of earlier
+        versions).  "frequency": rows weighted by their frequency, i.e.
+        Eq. 13 of the SLBT paper.
+    epsilon : float, default 0.01
+        Threshold of Eq. 8 for the suggested tree size in visual pruning.
+    als_max_iter : int, default 5000
+        Iteration cap per start of the least-squares fit.
+    als_tol : float, default 1e-12
+        Relative-decrease tolerance of the least-squares fit.
+    optimizer : {"softmax", "projected"}, default "softmax"
+        "softmax": gradient descent on the softmax parameters, the neural
+        network formulation of the paper (Eq. 16-19).  "projected":
+        projected gradient on the simplex, same objective and gradients
+        (Eq. 14-15) without the reparameterisation; it reaches optima with
+        some alpha or beta exactly 0 or 1, which the softmax only
+        approaches.
 
     Attributes (set after fit)
     --------------------------
@@ -62,6 +88,9 @@ class SLBT(BaseTree):
     reporter : TreeReporter
     targhet_dist : list
     root_N : int
+    classes_ : np.ndarray
+    strata_ : np.ndarray or None
+        Strata seen in fit (None when fit without ``x_s``).
     """
 
     def __init__(
@@ -77,6 +106,12 @@ class SLBT(BaseTree):
         node_max_features: int | None = None,
         rng                    = None,
         random_state: int | None = None,
+        n_init: int            = 1,
+        ls_weights: str        = "budget",
+        epsilon: float         = 0.01,
+        als_max_iter: int      = 5000,
+        als_tol: float         = 1e-12,
+        optimizer: str         = "softmax",
     ):
         super().__init__(
             min_ppi=min_ppi, min_gpi=min_gpi,
@@ -89,10 +124,29 @@ class SLBT(BaseTree):
                 f"homogeneity='{homogeneity}' not supported. "
                 "Choose from: 'none', 'A', 'B', 'AB'."
             )
+        if ls_weights not in ("budget", "frequency"):
+            raise ValueError(
+                f"ls_weights='{ls_weights}' not supported. "
+                "Choose from: 'budget', 'frequency'."
+            )
+        if int(n_init) < 1:
+            raise ValueError("n_init must be >= 1.")
         self.homogeneity       = homogeneity
         self.node_max_features = node_max_features
         self._rng              = rng
         self.random_state      = random_state
+        self.n_init            = int(n_init)
+        self.ls_weights        = ls_weights
+        self.epsilon           = float(epsilon)
+        self.als_max_iter      = int(als_max_iter)
+        self.als_tol           = float(als_tol)
+        if optimizer not in ("softmax", "projected"):
+            raise ValueError(
+                f"optimizer='{optimizer}' not supported. "
+                "Choose from: 'softmax', 'projected'."
+            )
+        self.optimizer         = optimizer
+        self.strata_           = None
 
 
     def _next_als_seed(self) -> int:
@@ -129,6 +183,12 @@ class SLBT(BaseTree):
         p = super().get_params(deep)
         p["homogeneity"]  = self.homogeneity
         p["random_state"] = self.random_state
+        p["n_init"]       = self.n_init
+        p["ls_weights"]   = self.ls_weights
+        p["epsilon"]      = self.epsilon
+        p["als_max_iter"] = self.als_max_iter
+        p["als_tol"]      = self.als_tol
+        p["optimizer"]    = self.optimizer
         p.pop("model", None)
         return p
 
@@ -161,6 +221,10 @@ class SLBT(BaseTree):
         if x_s is None:
             x_s              = np.zeros(len(y), dtype=int)
             self.homogeneity = "AB"
+            self.strata_     = None
+        else:
+            x_s          = np.asarray(x_s)
+            self.strata_ = np.unique(x_s)
 
         strategy = get_homogeneity_strategy(self.homogeneity)
 
@@ -168,19 +232,98 @@ class SLBT(BaseTree):
             np.unique(y),
             np.unique(y, return_counts=True)[1] / len(y),
         ]
+        self.classes_ = self.targhet_dist[0]
+        self._root_strata, self._root_strat_dist = strat_distribution(
+            y, x_s, self.classes_
+        )
         self.root_N  = len(y)
         self.reporter = TreeReporter(homogeneity=self.homogeneity, decimals=4)
+        self.convergence_ = []
 
         self.root = self._grow_tree(strategy, X, y, x_s)
         self._calculate_tree_partial_impurity_reduction()
         return self
 
-    def predict(self, X: pd.DataFrame) -> np.ndarray:
-        """Predict class labels for X."""
+    def predict(self, X: pd.DataFrame, x_s=None, by_stratum: bool = False) -> np.ndarray:
+        """
+        Predict class labels for X.
+
+        Parameters
+        ----------
+        X   : pd.DataFrame
+        x_s : array-like, optional
+            Stratum of each row.  Required when the tree has
+            stratum-specific splits (homogeneity "none" or "B" fitted with
+            strata); ignored for a tree fitted without ``x_s``.
+        by_stratum : bool, default False
+            False: the leaf predicts its pooled majority class.
+            True:  the leaf predicts the majority class of the observation's
+            own stratum within the leaf (the stratum-specific response
+            profile); falls back to the pooled class when that stratum is
+            absent from the leaf.
+        """
+        proba = None
+        if by_stratum:
+            proba = self.predict_proba(X, x_s=x_s, by_stratum=True)
+            return self.classes_[np.argmax(proba, axis=1)]
+        leaves = self._leaves_for(X, x_s)
+        return np.array([leaf.value for leaf in leaves])
+
+    def predict_proba(self, X: pd.DataFrame, x_s=None, by_stratum: bool = False) -> np.ndarray:
+        """
+        Class probabilities: the class distribution of the leaf reached by
+        each row (pooled, or of the row's own stratum if ``by_stratum``),
+        with columns ordered as ``classes_``.
+        """
+        leaves = self._leaves_for(X, x_s)
+        strata = self._strata_for(X, x_s)
+        col = {str(c): k for k, c in enumerate(self.classes_)}
+        P = np.zeros((len(leaves), len(self.classes_)))
+        for r, leaf in enumerate(leaves):
+            dist = leaf.distribution
+            if by_stratum and strata[r] is not None and leaf.strat_distribution is not None:
+                labels_s = [str(z) for z in leaf.strat_labels]
+                if str(strata[r]) in labels_s:
+                    dist = leaf.strat_distribution[labels_s.index(str(strata[r]))]
+            for lab, p in zip(leaf.labels, dist):
+                P[r, col[str(lab)]] = p
+        return P
+
+    def apply(self, X: pd.DataFrame, x_s=None) -> np.ndarray:
+        """Position (node id) of the leaf reached by each row."""
+        return np.array([leaf.position for leaf in self._leaves_for(X, x_s)])
+
+    def _strata_for(self, X, x_s):
+        if x_s is None or self.strata_ is None:
+            return [None] * len(X)
+        x_s = np.asarray(x_s)
+        if len(x_s) != len(X):
+            raise ValueError("x_s must have one entry per row of X.")
+        return list(x_s)
+
+    def _leaves_for(self, X, x_s):
         if self.root is None:
             raise RuntimeError("Tree not fitted. Call fit() first.")
-        return np.array([self._traverse_tree(X.iloc[i], self.root)
-                         for i in range(len(X))])
+        strata = self._strata_for(X, x_s)
+        return [traverse(self.root, X.iloc[i], strata[i]) for i in range(len(X))]
+
+    def prune_suggested(self) -> int | None:
+        """
+        Prune at the size suggested by Eq. 8 (threshold ``epsilon``).
+
+        Returns the id of the node at which the tree was cut, or None if no
+        node was flagged (nothing pruned).
+        """
+        if self.root is None:
+            raise RuntimeError("Tree not fitted. Call fit() first.")
+        nodes = []
+        self._collect_nodes(self.root, nodes)
+        flagged = [n for n in nodes if n.suggested_pruning]
+        if not flagged:
+            return None
+        node_id = flagged[0].position
+        self.prune_after_vp(node_id)
+        return node_id
 
     def prune_after_vp(self, nodeID: int) -> None:
         """
@@ -235,9 +378,12 @@ class SLBT(BaseTree):
                 node.pi        = None
                 node.LIFT_1    = None
                 node.LIFT_2    = None
+                node.als_diag  = None
+                node.seen      = None
                 best_idx       = int(np.argmax(node.distribution))
                 node.value     = node.labels[best_idx]
                 node.GCR       = self._get_gcr(node.distribution, node.labels)
+                node.LCR       = self._get_lcr(node)
 
         self._rebuild_report()
 
@@ -271,11 +417,14 @@ class SLBT(BaseTree):
             )
             tree_partial_impurity_reduction = 0.0
 
+        node_strata, node_strat_dist = strat_distribution(y, x_s, np.unique(y))
+
         # --- pre-split stopping criteria ---
         leaf = self._check_criteria_before(
             y, pos, impurity, distribution, depth,
             n_labels, n_samples, n_feats,
             impurity_decrease, tree_partial_impurity_reduction,
+            node_strata, node_strat_dist,
         )
         if leaf is not None:
             return leaf
@@ -290,7 +439,7 @@ class SLBT(BaseTree):
         gpi_vals, gpi_order = _gpi_stratified(X, y, x_s)
 
         # --- best split search ---
-        best_feature, best_treshold, best_pi, best_gpi, best_alpha, best_beta = (
+        best_feature, best_treshold, best_pi, best_gpi, best_alpha, best_beta, best_diag = (
             self._find_best_predictor(X, y, x_s, gpi_order, gpi_vals)
         )
 
@@ -299,6 +448,7 @@ class SLBT(BaseTree):
             y, pos, impurity, distribution, depth,
             best_gpi, best_pi,
             impurity_decrease, tree_partial_impurity_reduction,
+            node_strata, node_strat_dist,
         )
         if leaf is not None:
             return leaf
@@ -309,8 +459,10 @@ class SLBT(BaseTree):
 
         indexL, indexR = strategy.split(X[best_feature], x_s, thresholds)
 
-        # --- LIFT values ---
-        lift1, lift2 = strategy.compute_lift(best_beta, distribution)
+        # --- LIFT values (Eq. 4, prior = class distribution of each stratum) ---
+        lift1, lift2 = strategy.compute_lift(best_beta, node_strat_dist)
+        if best_diag is not None:
+            self.convergence_.append({"node": pos, "feature": best_feature, **best_diag})
 
         left  = self._grow_tree(
             strategy, X.loc[indexL], y[indexL], x_s[indexL],
@@ -331,7 +483,10 @@ class SLBT(BaseTree):
             distribution=distribution, N=len(y), labels=np.unique(y),
             LIFT_1=lift1, LIFT_2=lift2,
             GCR=None,
-            strat_labels=np.unique(x_s),
+            strat_labels=node_strata,
+            strat_distribution=node_strat_dist,
+            seen=seen_modalities(X[best_feature], x_s),
+            als_diag=best_diag,
         )
         if self.reporter is not None:
             self.reporter.add_node(node, is_leaf=False)
@@ -349,14 +504,18 @@ class SLBT(BaseTree):
             "gpi":       -np.inf,
             "alpha":     None,
             "beta":      None,
+            "diag":      None,
         }
 
         for rank, col in enumerate(gpi_order[: self.feats_viewed]):
             Fs_noN = _stratified_contingency(X[col], y, x_s, norm=False)
             Fs     = _stratified_contingency(X[col], y, x_s, norm=True)
 
-            pi, S, alpha, beta = score_slbt(
-                Fs_noN, Fs, self.homogeneity, self._next_als_seed()
+            pi, S, alpha, beta, diag = score_slbt(
+                Fs_noN, Fs, self.homogeneity, self._next_als_seed(),
+                n_init=self.n_init, ls_weights=self.ls_weights,
+                max_iter=self.als_max_iter, tol=self.als_tol,
+                optimizer=self.optimizer,
             )
 
             if pi > best["pi"]:
@@ -366,6 +525,7 @@ class SLBT(BaseTree):
                 best["alpha"]     = alpha
                 best["beta"]      = beta
                 best["gpi"]       = gpi_vals[rank]
+                best["diag"]      = diag
 
             if (self.FAST
                     and rank < len(gpi_order) - 1
@@ -379,6 +539,7 @@ class SLBT(BaseTree):
             best["gpi"],
             best["alpha"],
             best["beta"],
+            best["diag"],
         )
 
     # ================================================================
@@ -389,6 +550,7 @@ class SLBT(BaseTree):
         self, y, pos, impurity, distribution, depth,
         n_labels, n_samples, n_feats,
         impurity_decrease, tree_partial_impurity_reduction,
+        node_strata=None, node_strat_dist=None,
     ):
         if (depth >= self.max_depth
                 or n_labels == 1
@@ -398,6 +560,7 @@ class SLBT(BaseTree):
             return self._make_leaf(
                 y, pos, impurity, distribution,
                 impurity_decrease, tree_partial_impurity_reduction,
+                node_strata, node_strat_dist,
             )
         return None
 
@@ -405,17 +568,20 @@ class SLBT(BaseTree):
         self, y, pos, impurity, distribution, depth,
         best_gpi, best_pi,
         impurity_decrease, tree_partial_impurity_reduction,
+        node_strata=None, node_strat_dist=None,
     ):
         if best_gpi < self.min_gpi or best_pi < self.min_ppi or best_pi < 1e-8:
             return self._make_leaf(
                 y, pos, impurity, distribution,
                 impurity_decrease, tree_partial_impurity_reduction,
+                node_strata, node_strat_dist,
             )
         return None
 
     def _make_leaf(
         self, y, pos, impurity, distribution,
         impurity_decrease, tree_partial_impurity_reduction,
+        node_strata=None, node_strat_dist=None,
     ) -> Node:
         leaf = Node(
             position=pos,
@@ -427,7 +593,10 @@ class SLBT(BaseTree):
             N=len(y),
             labels=np.unique(y),
             GCR=self._get_gcr(distribution, np.unique(y)),
+            strat_labels=node_strata,
+            strat_distribution=node_strat_dist,
         )
+        leaf.LCR = self._get_lcr(leaf)
         if self.reporter is not None:
             self.reporter.add_node(leaf, is_leaf=True)
         return leaf
@@ -436,24 +605,20 @@ class SLBT(BaseTree):
     #  PRIVATE — utilities
     # ================================================================
 
-    def _traverse_tree(self, x: pd.Series, node: Node):
-        if node._is_leaf_node():
-            return node.value
-
-        treshold = node.treshold
-
-        if isinstance(treshold, np.ndarray) and treshold.ndim == 1:
-            goes_left = x[node.feature] in treshold
-        else:
-            union = {v for arr in treshold for v in arr}
-            goes_left = x[node.feature] in union
-
-        if goes_left:
-            return self._traverse_tree(x, node.left)
-        return self._traverse_tree(x, node.right)
+    def _traverse_tree(self, x: pd.Series, node: Node, s=None):
+        return traverse(node, x, s).value
 
     def _drop_constant_columns(self, X: pd.DataFrame) -> pd.DataFrame:
         return X.drop(columns=X.columns[X.nunique(dropna=False) <= 1])
+
+    def _get_lcr(self, node):
+        """Leaf Classification Ratio per stratum (Eq. 5)."""
+        if node.strat_distribution is None or node.strat_labels is None:
+            return None
+        return leaf_lcr(
+            node.strat_labels, node.labels, node.strat_distribution,
+            self._root_strata, self.classes_, self._root_strat_dist,
+        )
 
     def _get_gcr(self, distribution, labels):
         gcr = [0.0] * len(labels)
@@ -484,6 +649,7 @@ class SLBT(BaseTree):
             node.LIFT_1   = None
             node.LIFT_2   = None
             node.GCR      = self._get_gcr(node.distribution, node.labels)
+            node.LCR      = self._get_lcr(node)
             node.left     = node.right = None
             changed       = True
         return node, cl or cr or changed
@@ -508,7 +674,7 @@ class SLBT(BaseTree):
                 leaf.impurity_decrease * leaf.N / root_N
                 for leaf in virtual_leaves
             )
-            if part_imp_red - previous_part_imp_red < 0.01 and search:
+            if part_imp_red - previous_part_imp_red < self.epsilon and search:
                 current.suggested_pruning = True
                 search = False
             if current in virtual_leaves_set and not current._is_leaf_node():

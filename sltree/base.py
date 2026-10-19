@@ -74,6 +74,20 @@ class Node:
         Unique class labels present at this node.
     strat_labels : np.ndarray or None
         Unique stratum labels (SLBT only).
+    LCR : list of np.ndarray or None
+        Leaf Classification Ratio per stratum, Eq. 5 of the SLBT paper:
+        p_{j|(g)}(h) / p_{j|(g)}(1), one array per stratum in
+        ``strat_labels`` order (SLBT leaves only).  ``GCR`` is the same ratio
+        computed on the pooled class distribution.
+    strat_distribution : np.ndarray or None
+        Class distribution within each stratum at this node, shape
+        (len(strat_labels), len(labels)) (SLBT only).
+    seen : dict or None
+        Modalities of the split variable observed at this node, overall and
+        per stratum; used by prediction to route unseen values.
+    als_diag : dict or None
+        Convergence diagnostics of the least-squares SLBM fit that produced
+        the split (SLBT internal nodes only).
     value : scalar or None
         Predicted class (leaf nodes only).
     """
@@ -99,6 +113,10 @@ class Node:
         labels=None,
         strat_labels=None,
         y_stats=None,
+        LCR=None,
+        strat_distribution=None,
+        seen=None,
+        als_diag=None,
         *,
         value=None,
     ):
@@ -121,6 +139,10 @@ class Node:
         self.labels                          = labels
         self.strat_labels                    = strat_labels
         self.y_stats                         = y_stats   # dict with boxplot stats (twoClass only)
+        self.LCR                             = LCR
+        self.strat_distribution              = strat_distribution
+        self.seen                            = seen
+        self.als_diag                        = als_diag
         self.value                           = value
 
     def _is_leaf_node(self) -> bool:
