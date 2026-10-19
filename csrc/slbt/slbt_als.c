@@ -247,10 +247,16 @@ void slba_C_execute(int I, int J, int T, int TA, int TB, const double *Fs, doubl
     // Initialization of DX
     for(int t=0; t<T; t++){
         for(int i=0; i<I; i++){
+            /* DX is I x I: zero it over I columns, not J.  The row sum that
+               goes on the diagonal is over the J columns of F.  Conflating
+               the two bounds left DX[t][i][J..I-1] uninitialised when J < I
+               and wrote past the row when J > I. */
+            for(int j=0; j<I; j++){
+                DX[t][i][j] = 0.0;
+            }
             sum = 0.0;
             for(int j=0; j<J; j++){
-                sum += F[t][i][j] ;
-                DX[t][i][j] = 0.0;
+                sum += F[t][i][j];
             }
             DX[t][i][i] = sum;
         }

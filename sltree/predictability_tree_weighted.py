@@ -93,6 +93,20 @@ class PredictabilityTreeWeighted(BaseTree):
         self.model = model
 
     def get_params(self, deep: bool = True) -> dict:
+        """
+        Return the estimator's hyperparameters, scikit-learn style.
+
+        Parameters
+        ----------
+        deep : bool, default True
+            Accepted for interface compatibility.  This estimator holds no
+            nested estimators, so the flag makes no difference.
+
+        Returns
+        -------
+        dict
+            Parameter names mapped to their current values.
+        """
         p = super().get_params(deep)
         p["model"] = self.model
         p.pop("homogeneity", None)

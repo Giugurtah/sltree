@@ -15,6 +15,15 @@ from ..split import _split
 
 
 class HomogeneityAB(HomogeneityStrategy):
+    """
+    Both A and B shared across strata: the most constrained setting.
+
+    Equivalent to ignoring the stratification during the split search, and the
+    setting SLBT falls back to when ``fit`` is called without ``x_s``.  Useful
+    as a baseline: comparing it against ``HomogeneityNone`` measures how much
+    the stratification actually buys.
+    """
+
 
     def get_treshold_values(self, best_threshold, x_vals, x_s):
         bt = np.asarray(best_threshold)

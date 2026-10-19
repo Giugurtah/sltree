@@ -15,6 +15,17 @@ from ..split import _split
 
 
 class HomogeneityA(HomogeneityStrategy):
+    """
+    A (the mixing parameters) shared across strata; B free.
+
+    One split direction is imposed on every stratum, while the latent budget
+    profiles stay stratum-specific.  The tree structure is therefore common and
+    only the composition of the classes within each branch varies by stratum.
+
+    A relationship that reverses between strata is invisible here: sharing A
+    forces a single threshold direction.
+    """
+
 
     def get_treshold_values(self, best_threshold, x_vals, x_s):
         bt = np.asarray(best_threshold)

@@ -64,16 +64,15 @@ class Categorizer:
         the same data can produce slightly different bins.  Pass an integer
         to make the discretisation exactly reproducible; leave it as None to
         draw fresh entropy at every ``fit``, as scikit-learn does.
-
         Each column receives its own seed, derived deterministically from
         ``random_state``, so columns are clustered independently but the
         whole result is reproducible.
     label_style : {"int", "interval"}, default "int"
         Controls how bin labels are generated when ``labels`` is None.
-        ``"int"``      — integer indices (0, 1, 2, …).
-        ``"interval"`` — human-readable range strings derived from the bin
-                         edges, e.g. ``"<10"``, ``"10-20"``, ``"20-35"``,
-                         ``">35"``.
+
+        - ``"int"`` — integer indices (0, 1, 2, …).
+        - ``"interval"`` — human-readable range strings derived from the bin
+          edges, e.g. ``"<10"``, ``"10-20"``, ``"20-35"``, ``">35"``.
 
     Attributes (set after fit)
     --------------------------
@@ -200,6 +199,20 @@ class Categorizer:
         return self.fit(X).transform(X)
 
     def get_params(self, deep: bool = True) -> dict:
+        """
+        Return the estimator's hyperparameters, scikit-learn style.
+
+        Parameters
+        ----------
+        deep : bool, default True
+            Accepted for interface compatibility.  This estimator holds no
+            nested estimators, so the flag makes no difference.
+
+        Returns
+        -------
+        dict
+            Parameter names mapped to their current values.
+        """
         return {
             "method":      self.method,
             "k":           self.k,
@@ -212,6 +225,19 @@ class Categorizer:
         }
 
     def set_params(self, **params) -> "Categorizer":
+        """
+        Set hyperparameters, scikit-learn style.
+
+        Parameters
+        ----------
+        **params
+            Parameter names and values.  Names the estimator does not define
+            itself are forwarded to the weak learners.
+
+        Returns
+        -------
+        self
+        """
         for key, val in params.items():
             setattr(self, key, val)
         return self

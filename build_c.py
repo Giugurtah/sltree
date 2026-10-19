@@ -77,6 +77,9 @@ COMMON = CSRC / "common"
 #  Platform
 # ------------------------------------------------------------------ #
 
+# Diagnostic build flag, set by --init-pattern.  See build_one().
+_INIT_PATTERN = False
+
 # Cross-compilation target, set by --target.  None means "this machine".
 _TARGET = None
 
@@ -152,6 +155,23 @@ def build_one(spec: dict, cc: str, dry: bool = False) -> Path:
         *link_flags(),
         "-lm",
     ]
+    if _INIT_PATTERN:
+        # Diagnostic build.  Fills every uninitialised automatic variable with
+        # a non-zero byte pattern instead of whatever the stack happened to
+        # hold.  Code that never reads uninitialised memory gives identical
+        # results with and without it; code that does gives different ones.
+        #
+        # This is the detector for the DX bug fixed in slbt_als.c, and for
+        # anything of its kind.  A plain build cannot find them: Linux hands
+        # out zeroed stack pages, so the garbage read is usually zero and the
+        # answer comes out right by luck; the failure then surfaces on another
+        # platform, or once other code has run first in the same process.
+        #
+        #     python build_c.py --init-pattern && pytest
+        #
+        # Any difference from a normal build is a bug, not a tolerance issue.
+        # Needs gcc >= 12 or clang >= 8.
+        cmd.insert(3, "-ftrivial-auto-var-init=pattern")
 
     print(f"  {spec['name']}")
     print(f"    {' '.join(cmd)}")
@@ -200,7 +220,7 @@ def clean() -> None:
 
 
 def main() -> int:
-    global _TARGET
+    global _TARGET, _INIT_PATTERN
     ap = argparse.ArgumentParser(
         description="Build the SL-TREE C backends.",
         formatter_class=argparse.RawTextHelpFormatter)
@@ -208,6 +228,11 @@ def main() -> int:
                     help="print the commands without running them")
     ap.add_argument("--clean", action="store_true",
                     help="remove the built libraries")
+    ap.add_argument("--init-pattern", action="store_true",
+                    help="diagnostic build: fill uninitialised stack variables\n"
+                         "with a byte pattern.  Results must be identical to a\n"
+                         "normal build; any difference means the C code reads\n"
+                         "memory it never wrote.  Run it, then pytest.")
     ap.add_argument("--target", choices=("linux", "macos", "windows"),
                     help="cross-compile for another platform.  Needs a matching "
                          "cross-compiler in CC, e.g.\n"
@@ -216,6 +241,7 @@ def main() -> int:
                          "platform natively.")
     args = ap.parse_args()
     _TARGET = args.target
+    _INIT_PATTERN = args.init_pattern
 
     if args.clean:
         clean()

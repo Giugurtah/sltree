@@ -15,6 +15,15 @@ from ..split import _splitS
 
 
 class HomogeneityB(HomogeneityStrategy):
+    """
+    B (the latent budget profiles) shared across strata; A free.
+
+    The mirror image of ``HomogeneityA``: each stratum may split in its own
+    direction, but the profiles the branches point to are common.  Like
+    ``HomogeneityNone`` it can represent a reversal, while spending fewer
+    parameters on the profiles.
+    """
+
 
     def get_treshold_values(self, best_threshold, x_vals, x_s):
         bt         = np.asarray(best_threshold)   # shape (K, I)

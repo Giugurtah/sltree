@@ -78,7 +78,7 @@ class PredictabilityForest:
     --------------------------
     estimators_ : list[PredictabilityTree]
     estimators_features_ : list[list[str]]
-    ppi_importance_ : dict[str, float]
+    ``ppi_importance_`` : dict[str, float]
         Feature importance normalised to sum 1, sorted descending.
     oob_score_ : float | None
         OOB accuracy (classification) or R² (twoClass), only when bootstrap=True.
@@ -135,7 +135,7 @@ class PredictabilityForest:
 
         After all trees:
           5. Compute OOB score
-          6. Compute ppi_importance_
+          6. Compute ``ppi_importance_``
 
         Returns
         -------
@@ -248,7 +248,7 @@ class PredictabilityForest:
         Returns
         -------
         proba : np.ndarray, shape (n_samples, n_classes)
-            Columns ordered as self.classes_.
+            Columns ordered as ``self.classes_``.
 
         Raises
         ------
@@ -278,6 +278,20 @@ class PredictabilityForest:
         return proba
 
     def get_params(self, deep: bool = True) -> dict:
+        """
+        Return the estimator's hyperparameters, scikit-learn style.
+
+        Parameters
+        ----------
+        deep : bool, default True
+            Accepted for interface compatibility.  This estimator holds no
+            nested estimators, so the flag makes no difference.
+
+        Returns
+        -------
+        dict
+            Parameter names mapped to their current values.
+        """
         return {
             "n_estimators":     self.n_estimators,
             "model":            self.model,
@@ -290,6 +304,19 @@ class PredictabilityForest:
         }
 
     def set_params(self, **params) -> "PredictabilityForest":
+        """
+        Set hyperparameters, scikit-learn style.
+
+        Parameters
+        ----------
+        **params
+            Parameter names and values.  Names the estimator does not define
+            itself are forwarded to the weak learners.
+
+        Returns
+        -------
+        self
+        """
         for k, v in params.items():
             if hasattr(self, k):
                 setattr(self, k, v)

@@ -257,6 +257,20 @@ class PredictabilityAdaBoost:
                 yield self.classes_[np.argmax(votes, axis=1)]
 
     def get_params(self, deep: bool = True) -> dict:
+        """
+        Return the estimator's hyperparameters, scikit-learn style.
+
+        Parameters
+        ----------
+        deep : bool, default True
+            Accepted for interface compatibility.  This estimator holds no
+            nested estimators, so the flag makes no difference.
+
+        Returns
+        -------
+        dict
+            Parameter names mapped to their current values.
+        """
         return {
             "model":        self.model,
             "n_estimators": self.n_estimators,
@@ -268,6 +282,19 @@ class PredictabilityAdaBoost:
         }
 
     def set_params(self, **params) -> "PredictabilityAdaBoost":
+        """
+        Set hyperparameters, scikit-learn style.
+
+        Parameters
+        ----------
+        **params
+            Parameter names and values.  Names the estimator does not define
+            itself are forwarded to the weak learners.
+
+        Returns
+        -------
+        self
+        """
         for k, v in params.items():
             if hasattr(self, k):
                 setattr(self, k, v)

@@ -15,6 +15,19 @@ from ..split import _splitS
 
 
 class HomogeneityNone(HomogeneityStrategy):
+    """
+    No constraint: every stratum gets its own A and B.
+
+    The most permissive of the four.  Because the mixing parameters are free,
+    the split direction may differ between strata — a modality can go left in
+    one stratum and right in another.  It is the only setting, together with
+    ``HomogeneityB``, able to represent a relationship that reverses across
+    strata, which is what the London mode-choice application turns on.
+
+    The price is the largest number of free parameters, hence the greatest
+    exposure to overfitting on small strata.
+    """
+
 
     def get_treshold_values(self, best_threshold, x_vals, x_s):
         bt         = np.asarray(best_threshold)   # shape (K, I)

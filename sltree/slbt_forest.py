@@ -67,15 +67,16 @@ class SLBTForest:
     max_features : int | float | "sqrt" | "log2" | None, default "sqrt"
         Number of features considered at each split (node mode) or per tree
         (tree mode):
+
         - int   → exact count
         - float → fraction of total columns
         - "sqrt"→ floor(sqrt(p))
         - "log2"→ floor(log2(p))
         - None  → all features (no subsampling)
     feature_sampling : {"tree", "node"}, default "tree"
-        "tree" — random subspace: columns are subsampled once per tree.
-        "node" — true RF: all columns reach each tree, a fresh random subset
-                 is drawn at every node before the stratified GPI ranking.
+        - ``"tree"`` — random subspace: columns are subsampled once per tree.
+        - ``"node"`` — true RF: all columns reach each tree, a fresh random
+          subset is drawn at every node before the stratified GPI ranking.
     bootstrap : bool, default True
         If True, each tree is trained on a bootstrap sample of rows.
         If False, all rows are used (only feature subsampling applies).
@@ -286,6 +287,20 @@ class SLBTForest:
         return proba
 
     def get_params(self, deep: bool = True) -> dict:
+        """
+        Return the estimator's hyperparameters, scikit-learn style.
+
+        Parameters
+        ----------
+        deep : bool, default True
+            Accepted for interface compatibility.  This estimator holds no
+            nested estimators, so the flag makes no difference.
+
+        Returns
+        -------
+        dict
+            Parameter names mapped to their current values.
+        """
         return {
             "n_estimators":    self.n_estimators,
             "homogeneity":     self.homogeneity,
@@ -298,6 +313,19 @@ class SLBTForest:
         }
 
     def set_params(self, **params) -> "SLBTForest":
+        """
+        Set hyperparameters, scikit-learn style.
+
+        Parameters
+        ----------
+        **params
+            Parameter names and values.  Names the estimator does not define
+            itself are forwarded to the weak learners.
+
+        Returns
+        -------
+        self
+        """
         for k, v in params.items():
             if hasattr(self, k):
                 setattr(self, k, v)

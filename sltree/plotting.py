@@ -798,10 +798,9 @@ def plot_html(
     title : str, default "Tree Visualisation"
         Page title.
     visual_pruning : bool, default False
-        False → standard layout: uniform branch lengths per depth level.
-        True  → visual-pruning layout: node vertical position proportional
-                to ``impurity_decrease``; dashed horizontal lines show its
-                values.
+        - False → standard layout: uniform branch lengths per depth level.
+        - True → visual-pruning layout: node vertical position proportional
+          to ``impurity_decrease``; dashed horizontal lines show its values.
     color_palette : list[str], optional
         Hex colour list for the target classes (classification models).
         Defaults to DEFAULT_COLORS.  Ignored for twoClass.
