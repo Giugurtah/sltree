@@ -64,7 +64,7 @@ class SLBTWeighted(BaseTree):
     max_depth : int, default 5
     feats_viewed : int, default 10
     FAST : bool, default True
-    n_init, ls_weights, epsilon, als_max_iter, als_tol, optimizer :
+    n_init, ls_weights, epsilon, als_max_iter, als_tol, optimizer, tie_break :
         As in ``SLBT``.
     """
 
@@ -86,6 +86,7 @@ class SLBTWeighted(BaseTree):
         als_max_iter: int      = 5000,
         als_tol: float         = 1e-12,
         optimizer: str         = "softmax",
+        tie_break: str         = "loss",
     ):
         super().__init__(
             min_ppi=min_ppi, min_gpi=min_gpi,
@@ -119,6 +120,9 @@ class SLBTWeighted(BaseTree):
                 "Choose from: 'softmax', 'projected'."
             )
         self.optimizer    = optimizer
+        if tie_break not in ("loss", "pi"):
+            raise ValueError("tie_break must be 'loss' or 'pi'.")
+        self.tie_break    = tie_break
         self.strata_      = None
 
 
@@ -162,6 +166,7 @@ class SLBTWeighted(BaseTree):
         p["als_max_iter"] = self.als_max_iter
         p["als_tol"]      = self.als_tol
         p["optimizer"]    = self.optimizer
+        p["tie_break"]    = self.tie_break
         p.pop("model", None)
         return p
 
@@ -368,7 +373,7 @@ class SLBTWeighted(BaseTree):
                 Fs_noN, Fs, self.homogeneity, self._next_als_seed(),
                 n_init=self.n_init, ls_weights=self.ls_weights,
                 max_iter=self.als_max_iter, tol=self.als_tol,
-                optimizer=self.optimizer,
+                optimizer=self.optimizer, tie_break=self.tie_break,
             )
 
             if pi > best["pi"]:

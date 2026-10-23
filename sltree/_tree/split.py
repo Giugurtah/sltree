@@ -135,7 +135,8 @@ def _ls_table(Fs_noN: np.ndarray, Fs: np.ndarray, ls_weights: str) -> np.ndarray
 def score_slbt(Fs_noN: np.ndarray, Fs: np.ndarray, homogeneity: str = "none",
                seed: int = 0, n_init: int = 1, ls_weights: str = "budget",
                max_iter: int = 5000, tol: float = 1e-12,
-               optimizer: str = "softmax"):
+               optimizer: str = "softmax", tie_break: str = "loss",
+               tie_tol: float = 1e-7):
     """
     Call the C SLBT splitting algorithm (slba).
 
@@ -150,6 +151,17 @@ def score_slbt(Fs_noN: np.ndarray, Fs: np.ndarray, homogeneity: str = "none",
     max_iter    : int — iteration cap per start
     tol         : float — relative-decrease tolerance
     optimizer   : {"softmax", "projected"} — see ``_backend._slbt.slba``
+    tie_break   : {"loss", "pi"}
+        Which of the n_init starts is kept.
+        "loss" : the start with the lowest loss (first one on exact ties).
+        "pi"   : among the starts whose loss is within ``tie_tol`` (relative)
+                 of the lowest, the one whose split has the largest PI.
+                 The latent budget model with K = 2 is not identified:
+                 different (A, B) reach the same optimum and alpha can cross
+                 0.5 along that set, so the split rule alpha >= 0.5 is not
+                 fixed by the loss alone.  "pi" resolves the indeterminacy in
+                 favour of the most predictive of the equivalent splits.
+    tie_tol     : float — relative tolerance defining "same loss" for "pi"
 
     Returns
     -------
@@ -176,8 +188,58 @@ def score_slbt(Fs_noN: np.ndarray, Fs: np.ndarray, homogeneity: str = "none",
         raise ValueError(
             f"Unknown optimizer '{optimizer}'. Choose from: ['softmax', 'projected']"
         )
-    return slba(K, KA, KB, I, J, FsNoN_flat, Fs_flat, seed,
-                n_init=n_init, max_iter=max_iter, tol=tol, optimizer=optimizer)
+    if tie_break == "loss" or n_init == 1:
+        return slba(K, KA, KB, I, J, FsNoN_flat, Fs_flat, seed,
+                    n_init=n_init, max_iter=max_iter, tol=tol, optimizer=optimizer)
+    if tie_break != "pi":
+        raise ValueError(f"Unknown tie_break '{tie_break}'. Choose from: ['loss', 'pi']")
+
+    # One C call per start: start 0 uses ``seed`` itself (same matrices as
+    # n_init = 1), the others seeds drawn from it.
+    seeds = [int(seed)] + [
+        int(v) for v in np.random.default_rng(int(seed) & 0xFFFFFFFFFFFFFFFF)
+        .integers(0, 2 ** 63, size=n_init - 1)
+    ]
+    runs = [
+        slba(K, KA, KB, I, J, FsNoN_flat, Fs_flat, sd,
+             n_init=1, max_iter=max_iter, tol=tol, optimizer=optimizer)
+        for sd in seeds
+    ]
+    losses = np.array([r[4]["loss"] for r in runs])
+    best_loss = losses.min()
+    optimal = np.flatnonzero(losses <= best_loss + tie_tol * (1.0 + abs(best_loss)))
+    pis = np.array([runs[k][0] for k in optimal])
+    chosen = int(optimal[np.argmax(pis)])          # first one on exact PI ties
+    pi, S, alpha, beta, diag = runs[chosen]
+
+    observed = (Fs_noN.sum(axis=2) > 0)            # (K, I)
+    obs_alpha = observed if KA == K else observed.any(axis=0, keepdims=True)
+    per_stratum = (KA == K and KB == K and K > 1)
+
+    def canon(S_):
+        rows = []
+        for t in range(S_.shape[0]):
+            r = S_[t][obs_alpha[t]].astype(int)
+            if per_stratum and r.size and r[0] == 0:
+                r = 1 - r
+            rows.append(tuple(r))
+        flat = tuple(v for r in rows for v in r)
+        if not per_stratum and flat and flat[0] == 0:
+            flat = tuple(1 - v for v in flat)
+        return flat
+
+    ref = canon(S)
+    diag = dict(diag)
+    diag.update({
+        "loss_worst_start":    float(losses.max()),
+        "n_converged_starts":  int(sum(r[4]["converged"] for r in runs)),
+        "n_same_split_starts": int(sum(canon(r[1]) == ref for r in runs)),
+        "n_init":              int(n_init),
+        "n_optimal_starts":    int(optimal.size),
+        "n_optimal_splits":    int(len({canon(runs[k][1]) for k in optimal})),
+        "pi_range_optimal":    float(pis.max() - pis.min()),
+    })
+    return pi, S, alpha, beta, diag
 
 
 # ============================================================

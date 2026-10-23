@@ -265,3 +265,27 @@ def test_verbose_one_does_print(X, y):
         PredictabilityForest(n_estimators=3, max_depth=2, feats_viewed=2,
                              random_state=0, verbose=1).fit(X, y)
     assert len(buf.getvalue()) > 0
+
+
+@pytest.mark.parametrize("method,kw", [("elbow", {}), ("silhouette", {}), ("fixed", {"k": 3})])
+def test_categorizer_assigns_values_outside_the_fitted_range(method, kw):
+    """New data beyond the min / max seen in fit go to the first / last bin.
+
+    The outer edges of each bin set are the fitted min and max; with closed
+    outer bins, pd.cut returned NaN for every value outside them, so any test
+    set or bootstrap sample with a more extreme value lost observations.
+    """
+    import numpy as np
+    import pandas as pd
+    from sltree import Categorizer
+
+    rng = np.random.default_rng(0)
+    train = pd.DataFrame({"x": rng.normal(size=200)})
+    cat = Categorizer(method=method, random_state=0, **kw).fit(train)
+    new = pd.DataFrame({"x": [train.x.min() - 5.0, train.x.max() + 5.0, np.nan]})
+    out = cat.transform(new)["x"]
+    labels = cat.labels_["x"]
+    assert out.iloc[0] == labels[0]
+    assert out.iloc[1] == labels[cat.k_["x"] - 1]
+    assert pd.isna(out.iloc[2])                       # missing stays missing
+    assert cat.transform(train)["x"].notna().all()

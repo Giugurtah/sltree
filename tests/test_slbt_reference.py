@@ -415,3 +415,24 @@ def test_frequency_weighting_changes_only_the_fit():
         assert mb.root.gpi == pytest.approx(mf.root.gpi)
     with pytest.raises(ValueError):
         SLBT(ls_weights="counts")
+
+
+def test_tie_break_pi_keeps_the_most_predictive_of_the_optimal_splits():
+    """tie_break="pi": among the starts reaching the lowest loss, the split
+    with the largest PI is kept; with one start both rules coincide."""
+    from sltree._tree.split import score_slbt
+    joint, budgets, _ = _budget_tables(1)
+    kw = dict(optimizer="projected")
+    a = score_slbt(joint, budgets, "none", seed=3, n_init=1, tie_break="pi", **kw)
+    b = score_slbt(joint, budgets, "none", seed=3, n_init=1, tie_break="loss", **kw)
+    assert a[0] == b[0] and np.array_equal(a[1], b[1])
+
+    pi, S, _, _, diag = score_slbt(joint, budgets, "none", seed=3, n_init=40,
+                                   tie_break="pi", **kw)
+    seeds = [3] + [int(v) for v in np.random.default_rng(3).integers(0, 2 ** 63, size=39)]
+    runs = [score_slbt(joint, budgets, "none", seed=s, n_init=1, **kw) for s in seeds]
+    best = min(r[4]["loss"] for r in runs)
+    best_pi = max(r[0] for r in runs if r[4]["loss"] <= best + 1e-7 * (1 + best))
+    assert pi == pytest.approx(best_pi)
+    assert diag["loss"] == pytest.approx(best)
+    assert diag["n_optimal_starts"] >= 1 and diag["n_optimal_splits"] >= 1

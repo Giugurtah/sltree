@@ -320,6 +320,12 @@ class Categorizer:
         n_bins     = len(bins) - 1
         cut_labels = labels[:n_bins] if len(labels) >= n_bins else labels
 
+        # The outer edges are the minimum and maximum seen in fit.  New data
+        # (a test set, a bootstrap sample) can fall outside them: the first and
+        # last bins are open-ended, otherwise those values would become NaN.
+        bins = np.asarray(bins, dtype=float).copy()
+        bins[0], bins[-1] = -np.inf, np.inf
+
         try:
             return pd.cut(
                 X,

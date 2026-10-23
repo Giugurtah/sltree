@@ -81,6 +81,10 @@ class SLBT(BaseTree):
         (Eq. 14-15) without the reparameterisation; it reaches optima with
         some alpha or beta exactly 0 or 1, which the softmax only
         approaches.
+    tie_break : {"loss", "pi"}, default "loss"
+        Which start is kept when ``n_init`` > 1: the lowest loss ("loss"),
+        or, among the starts with the same lowest loss, the split with the
+        largest PI ("pi").  See ``_tree.split.score_slbt``.
 
     Attributes (set after fit)
     --------------------------
@@ -112,6 +116,7 @@ class SLBT(BaseTree):
         als_max_iter: int      = 5000,
         als_tol: float         = 1e-12,
         optimizer: str         = "softmax",
+        tie_break: str         = "loss",
     ):
         super().__init__(
             min_ppi=min_ppi, min_gpi=min_gpi,
@@ -146,6 +151,9 @@ class SLBT(BaseTree):
                 "Choose from: 'softmax', 'projected'."
             )
         self.optimizer         = optimizer
+        if tie_break not in ("loss", "pi"):
+            raise ValueError("tie_break must be 'loss' or 'pi'.")
+        self.tie_break         = tie_break
         self.strata_           = None
 
 
@@ -189,6 +197,7 @@ class SLBT(BaseTree):
         p["als_max_iter"] = self.als_max_iter
         p["als_tol"]      = self.als_tol
         p["optimizer"]    = self.optimizer
+        p["tie_break"]    = self.tie_break
         p.pop("model", None)
         return p
 
@@ -515,7 +524,7 @@ class SLBT(BaseTree):
                 Fs_noN, Fs, self.homogeneity, self._next_als_seed(),
                 n_init=self.n_init, ls_weights=self.ls_weights,
                 max_iter=self.als_max_iter, tol=self.als_tol,
-                optimizer=self.optimizer,
+                optimizer=self.optimizer, tie_break=self.tie_break,
             )
 
             if pi > best["pi"]:

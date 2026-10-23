@@ -40,6 +40,40 @@ def _contingency_matrix(x: pd.Series, y: pd.Series) -> np.ndarray:
     return F_cond.to_numpy(dtype=np.float64)
 
 
+def _joint_table(x, y, x_s, w=None) -> np.ndarray:
+    """
+    K x I x J table of (weighted) counts, normalised to sum to 1.
+
+    Levels are ordered as ``np.unique`` orders them (sorted), for the strata,
+    the predictor modalities and the classes alike — the order in which every
+    caller pairs thresholds, budgets and strata.
+
+    Built with a single ``np.bincount`` on the combined cell index.  Earlier
+    versions called ``pd.crosstab`` once per stratum, which accounted for
+    ~97% of the fitting time of an SLBT.
+    """
+    _, xi = np.unique(np.asarray(x),   return_inverse=True)
+    _, yi = np.unique(np.asarray(y),   return_inverse=True)
+    _, si = np.unique(np.asarray(x_s), return_inverse=True)
+    I = int(xi.max()) + 1 if xi.size else 0
+    J = int(yi.max()) + 1 if yi.size else 0
+    K = int(si.max()) + 1 if si.size else 0
+    cell = (si.ravel() * I + xi.ravel()) * J + yi.ravel()
+    weights = None if w is None else np.asarray(w, dtype=np.float64)
+    F = np.bincount(cell, weights=weights, minlength=K * I * J).astype(np.float64)
+    F = F.reshape(K, I, J)
+    total = F.sum()
+    if total > 0:
+        F /= total
+    return F
+
+
+def _row_conditional(F: np.ndarray) -> np.ndarray:
+    """Budgets p_{.|i(k)}: each (stratum, modality) row divided by its sum."""
+    row = F.sum(axis=2, keepdims=True)
+    return np.divide(F, row, out=np.zeros_like(F), where=row > 0)
+
+
 def _stratified_contingency_weighted(
     x: pd.Series,
     y: pd.Series,
@@ -59,55 +93,18 @@ def _stratified_contingency_weighted(
     x    : pd.Series
     y    : pd.Series
     x_s  : np.ndarray  — stratum indicator
-    w    : np.ndarray  — per-sample weights (should sum to 1)
+    w    : np.ndarray  — per-sample weights
     norm : bool, default False
         Same semantics as in ``_stratified_contingency``:
-        False → raw joint weight proportions (K, I, J)
-        True  → row-conditional within-stratum (K, I, J)
+        False → joint weight proportions (K, I, J), summing to 1
+        True  → row-conditional within-stratum budgets (K, I, J)
 
     Returns
     -------
     Fs : np.ndarray, shape (K, I, J), dtype float64
     """
-    x_levels = sorted(np.unique(x))
-    y_levels = sorted(np.unique(y))
-    s_levels = sorted(np.unique(x_s))
-
-    I = len(x_levels)
-    J = len(y_levels)
-    K = len(s_levels)
-
-    w = np.asarray(w, dtype=np.float64)
-
-    Fs_raw = np.zeros((K, I, J), dtype=np.float64)
-    for k, s in enumerate(s_levels):
-        mask  = x_s == s
-        x_sub = x[mask]
-        y_sub = y[mask]
-        w_sub = w[mask]
-        ct = pd.crosstab(
-            pd.Categorical(x_sub, categories=x_levels),
-            pd.Categorical(y_sub, categories=y_levels),
-            values=w_sub,
-            aggfunc="sum",
-            dropna=False,
-        ).reindex(index=x_levels, columns=y_levels, fill_value=0).fillna(0)
-        Fs_raw[k] = ct.to_numpy(dtype=np.float64)
-
-    W_total = Fs_raw.sum()
-    if W_total > 0:
-        Fs_raw /= W_total
-
-    if not norm:
-        return Fs_raw
-
-    Fs = np.zeros((K, I, J), dtype=np.float64)
-    for k in range(K):
-        for i in range(I):
-            row_sum = Fs_raw[k, i, :].sum()
-            if row_sum > 0:
-                Fs[k, i, :] = Fs_raw[k, i, :] / row_sum
-    return Fs
+    F = _joint_table(x, y, x_s, w)
+    return _row_conditional(F) if norm else F
 
 
 def _stratified_contingency(
@@ -123,56 +120,17 @@ def _stratified_contingency(
     ----------
     x    : pd.Series    — predictor column
     y    : pd.Series    — target column
-    x_s  : np.ndarray  — stratum indicator (one integer per observation)
+    x_s  : np.ndarray  — stratum indicator (one entry per observation)
     norm : bool, default False
-        If False  → returns raw joint frequency array  Fs[k, i, j]
-                    (proportions, summing to 1 over all k, i, j)
-        If True   → returns row-conditional within-stratum array
-                    Fs[k, i, j] = P(Y=j | X=i) * stratum_weight
+        If False  → joint proportions Fs[k, i, j], summing to 1 over all
+                    k, i, j
+        If True   → row-conditional within-stratum budgets
+                    Fs[k, i, j] = P(Y=j | X=i, stratum k)  (rows of zeros for
+                    modalities absent from a stratum)
 
     Returns
     -------
     Fs : np.ndarray, shape (K, I, J), dtype float64
     """
-    x_levels = sorted(np.unique(x))
-    y_levels = sorted(np.unique(y))
-    s_levels = sorted(np.unique(x_s))
-
-    I = len(x_levels)
-    J = len(y_levels)
-    K = len(s_levels)
-
-    # Overall row-conditional distribution  (used when norm=True)
-    F_total      = pd.crosstab(x, y, dropna=False)
-    F_total_cond = F_total.div(F_total.sum(axis=1), axis=0).fillna(0)
-    F_total_np   = F_total_cond.to_numpy(dtype=np.float64)
-
-    # Joint frequency array
-    Fs_raw = np.zeros((K, I, J), dtype=np.float64)
-    for k, s in enumerate(s_levels):
-        mask = (x_s == s)
-        ct = pd.crosstab(
-            pd.Categorical(x[mask], categories=x_levels),
-            pd.Categorical(y[mask], categories=y_levels),
-            dropna=False,
-        ).reindex(index=x_levels, columns=y_levels, fill_value=0)
-        Fs_raw[k] = ct.values
-
-    N_total = Fs_raw.sum()
-    if N_total > 0:
-        Fs_raw /= N_total
-
-    if not norm:
-        return Fs_raw
-
-    # Row-conditional within-stratum array
-    Fs = np.zeros((K, I, J), dtype=np.float64)
-    for k in range(K):
-        for i in range(I):
-            row_sum = Fs_raw[k, i, :].sum()
-            if row_sum > 0:
-                Fs[k, i, :] = Fs_raw[k, i, :] / row_sum
-            else:
-                Fs[k, i, :] = 0.0
-
-    return Fs
+    F = _joint_table(x, y, x_s)
+    return _row_conditional(F) if norm else F
