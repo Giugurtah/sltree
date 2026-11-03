@@ -189,9 +189,10 @@ class BaseTree:
         - int   → exact count (capped at the number of available features).
         - float in (0.0, 1.0] → fraction of available features at each node,
           resolved to max(1, round(fraction * n_available)) at split time.
-    FAST : bool, default False
+    FAST : bool, default True
         When True, the feature loop stops as soon as ``best_ppi > next_gpi``
-        (the next candidate cannot improve the split).
+        (the next candidate cannot improve the split, so the tree does not
+        change).
     homogeneity : {"none", "A", "B", "AB"}, default "none"
         Homogeneity constraint for stratified splits (SLBT only).
         Ignored by PredictabilityTree.
@@ -205,7 +206,7 @@ class BaseTree:
         min_samples_split: int  = 1,
         max_depth: int          = 100,
         feats_viewed: int | float = 10,
-        FAST: bool              = False,
+        FAST: bool              = True,
         homogeneity: str        = "none",
     ):
         # Stopping criteria

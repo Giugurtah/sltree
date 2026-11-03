@@ -29,9 +29,16 @@ import pandas as pd
 
 from .base       import BaseTree, Node
 from .reporting  import TreeReporter
-from ._utils.criteria import _impurity, _variance, _y_stats, _gpi, _get_sizes
-from ._utils.utils    import _contingency_matrix
+from ._utils.criteria import _impurity, _variance, _y_stats
+from ._utils.coding   import (
+    encode, encode_frame, non_constant, NodeCodes, row_conditional_counts,
+)
+from ._backend._pitree import gpi as _c_gpi
 from ._tree.split     import score_predictability, _split
+
+
+#: Margin of the FAST early stop (see the FAST parameter).
+_FAST_MARGIN = 1e-12
 
 
 class PredictabilityTree(BaseTree):
@@ -54,8 +61,13 @@ class PredictabilityTree(BaseTree):
         Maximum tree depth.
     feats_viewed : int, default 10
         Top-GPI features evaluated per node.
-    FAST : bool, default False
-        Stop feature loop early when ``best_ppi > next_gpi``.
+    FAST : bool, default True
+        Stop the loop over the candidate predictors as soon as the best PI
+        found exceeds the GPI of the next predictor.  Since PI <= GPI for
+        every split of a predictor (the split coarsens its categories) and
+        the predictors are visited by decreasing GPI, no later predictor can
+        win: the tree is the same as with FAST=False, only faster.  A margin
+        of 1e-12 keeps the guarantee against rounding in the last digit.
 
     Attributes (set after fit)
     --------------------------
@@ -74,7 +86,7 @@ class PredictabilityTree(BaseTree):
         min_samples_split: int = 1,
         max_depth: int         = 100,
         feats_viewed: int      = 10,
-        FAST: bool             = False,
+        FAST: bool             = True,
         node_max_features: int | None = None,
         rng                    = None,
     ):
@@ -140,7 +152,11 @@ class PredictabilityTree(BaseTree):
         self.root_N  = len(y)
         self.reporter = TreeReporter(decimals=4)
 
-        self.root = self._grow_tree(X, y)
+        self._begin_fit(X, y)
+        try:
+            self.root = self._grow_tree(np.arange(len(y)), np.arange(X.shape[1]))
+        finally:
+            self._end_fit()
         self._calculate_tree_partial_impurity_reduction()
         return self
 
@@ -215,20 +231,53 @@ class PredictabilityTree(BaseTree):
         self._rebuild_report()
 
     # ================================================================
+    #  PRIVATE — data coded once per fit (see _utils.coding)
+    # ================================================================
+
+    def _begin_fit(self, X, y):
+        self._feat_names = list(X.columns)
+        self._C, self._C_sizes = encode_frame(X)
+        self._X_cols = [X.iloc[:, c] for c in range(X.shape[1])]
+        self._y = y if isinstance(y, pd.Series) else pd.Series(y)
+        if self.model == "twoClass":
+            self._yc, self._J = None, None        # re-binarised at every node
+        else:
+            self._yc, self._J = encode(y)
+        self._w = None
+
+    def _end_fit(self):
+        for a in ("_C", "_C_sizes", "_X_cols", "_y", "_yc", "_w"):
+            setattr(self, a, None)
+
+    def _node_y_codes(self, rows, y):
+        """Codes of the (possibly re-binarised) target at the node."""
+        if self._yc is None:
+            return encode(y)
+        return self._yc[rows], self._J
+
+    # ================================================================
     #  PRIVATE — tree growth
     # ================================================================
 
     def _grow_tree(
         self,
-        X: pd.DataFrame,
-        y: pd.Series,
+        rows: np.ndarray,
+        cols,
         root_impurity: float  = 1.0,
         root_N: int           = 1,
         depth: int            = 0,
         pos: int              = 1,
     ) -> Node:
+        """
+        Grow the subtree of the node holding the observations ``rows``
+        (positions in the data given to ``fit``), with candidate predictors
+        ``cols`` (column indices, in the order the node sees them).
+        """
+        y = self._y.iloc[rows]
 
-        X = self._drop_constant_columns(X)
+        # constant predictors are dropped (as X.drop did, keeping the order)
+        nonconst = non_constant(self._C[np.ix_(rows, cols)]) if len(cols) else np.zeros(0, bool)
+        cols = [c for c, keep in zip(cols, nonconst) if keep]
 
         # --- twoClass: binarize numeric target locally at this node ---
         # y_original keeps the original numeric values to pass to child nodes,
@@ -237,7 +286,11 @@ class PredictabilityTree(BaseTree):
         if self.model == "twoClass":
             y = self._binarize_y(y)
 
-        n_samples, n_feats, n_labels, impurity, distribution = _get_sizes(X, y)
+        n_samples    = len(rows)
+        n_feats      = len(cols)
+        n_labels     = len(np.unique(y))
+        impurity     = _impurity(y)
+        distribution = np.unique(y, return_counts=True)[1] / len(y)
 
         # twoClass: override Gini impurity with variance of the original
         # numeric target so that visual-pruning branch lengths reflect
@@ -276,17 +329,22 @@ class PredictabilityTree(BaseTree):
             return leaf
 
         # --- per-node random feature subsampling (true RF mode) ---
+        # As before, the children only see the predictors sampled here.
         if self.node_max_features is not None and self._rng is not None:
-            n = min(self.node_max_features, X.shape[1])
-            sampled_cols = self._rng.choice(X.columns.tolist(), size=n, replace=False)
-            X = X[sampled_cols]
+            n = min(self.node_max_features, len(cols))
+            by_name = {self._feat_names[c]: c for c in cols}
+            sampled = self._rng.choice([self._feat_names[c] for c in cols],
+                                       size=n, replace=False)
+            cols = [by_name[name] for name in sampled]
 
-        # --- GPI ranking ---
-        gpi_vals, gpi_order = _gpi(X, y)
+        # --- GPI ranking (one table per predictor) ---
+        yc, J = self._node_y_codes(rows, y)
+        nc = NodeCodes(yc, J)
+        gpi_vals, gpi_order, tables = self._node_tables(rows, cols, nc)
 
         # --- best split search ---
         best_feature, best_treshold, best_pi, best_gpi = self._find_best_predictor(
-            X, y, gpi_order, gpi_vals
+            tables, gpi_order, gpi_vals
         )
 
         # --- post-split stopping criteria ---
@@ -300,14 +358,16 @@ class PredictabilityTree(BaseTree):
             return leaf
 
         # --- split ---
-        threshold_labels = np.unique(X[best_feature])[np.array(best_treshold) > 0]
-        indexL, indexR   = _split(X[best_feature], threshold_labels)
+        c_best = {str(k): v[0] for k, v in tables.items()}[best_feature]
+        x_best = self._X_cols[c_best].iloc[rows]
+        threshold_labels = np.unique(x_best)[np.array(best_treshold) > 0]
+        indexL, indexR   = _split(x_best, threshold_labels)
 
         # Pass y_original to children so each node re-binarizes on its own
         # local distribution (twoClass). For other models y_original == y.
-        left  = self._grow_tree(X.loc[indexL], y_original[indexL],
+        left  = self._grow_tree(rows[indexL], cols,
                                 root_impurity, root_N, depth + 1, 2 * pos)
-        right = self._grow_tree(X.loc[indexR], y_original[indexR],
+        right = self._grow_tree(rows[indexR], cols,
                                 root_impurity, root_N, depth + 1, 2 * pos + 1)
 
         node = Node(
@@ -329,14 +389,30 @@ class PredictabilityTree(BaseTree):
     #  PRIVATE — best predictor search
     # ================================================================
 
-    def _find_best_predictor(self, X, y, gpi_order, gpi_vals):
+    def _node_tables(self, rows, cols, nc):
+        """
+        GPI of every candidate predictor, sorted as ``_utils.criteria._gpi``
+        sorts them (descending, ties by name), and its row-conditional table
+        (the one ``pd.crosstab`` gave), built once per (node, predictor).
+        """
+        vals, names, tables = [], [], {}
+        for c in cols:
+            F = row_conditional_counts(nc.counts(self._C[rows, c], self._C_sizes[c]))
+            I, J = F.shape
+            vals.append(_c_gpi(I, J, F.ravel().astype(np.float64)))
+            names.append(self._feat_names[c])
+            tables[self._feat_names[c]] = (c, F)
+        vals, names = zip(*sorted(zip(vals, names), reverse=True))
+        return vals, names, tables
+
+    def _find_best_predictor(self, tables, gpi_order, gpi_vals):
         best = {"feature": None, "threshold": None, "pi": -np.inf, "gpi": -np.inf}
 
         algo      = "twoStage" if self.model == "twoClass" else self.model
         n_to_view = self._resolve_feats_viewed(len(gpi_order))
 
         for rank, col in enumerate(gpi_order[:n_to_view]):
-            F      = _contingency_matrix(X[col], y)
+            F      = tables[col][1]
             pi, S  = score_predictability(F, algo)
 
             if pi > best["pi"]:
@@ -347,7 +423,7 @@ class PredictabilityTree(BaseTree):
 
             if (self.FAST
                     and rank < len(gpi_order) - 1
-                    and best["pi"] > gpi_vals[rank + 1]):
+                    and best["pi"] > gpi_vals[rank + 1] + _FAST_MARGIN):
                 break
 
         return best["feature"], best["threshold"], best["pi"], best["gpi"]

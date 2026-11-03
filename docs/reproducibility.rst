@@ -36,6 +36,17 @@ The claim is tested, not asserted: ``tests/test_cross_platform.py`` compares
 whole trees — feature, size, impurity, V, PI and GPI at every node, to twelve
 decimal places — against stored snapshots.
 
+**Speed settings do not change the tree.**  The starting matrices of the
+least-squares fit of predictor *c* at node *t* come from a seed fixed by
+(``random_state``, *t*, *c*), not from a stream consumed one fit after the
+other.  So ``FAST`` (which skips the predictors that cannot win),
+``n_jobs`` (which runs the ``n_init`` starts in parallel threads) and the order
+in which the candidates are evaluated leave every split unchanged, and fitting
+the same estimator twice grows the same tree.  The integer coding of the data
+done at the start of ``fit`` gives the same contingency tables, bit for bit,
+as building them from the original values at every node.
+``tests/test_speedups.py`` checks all of this.
+
 **Components do not perturb each other.**  Each generator carries its own
 state, so fitting a ``Categorizer`` between two ``SLBT`` fits leaves them
 identical.  This was not always true: both backends once shared libc's global

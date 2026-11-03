@@ -28,10 +28,14 @@ import pandas as pd
 
 from .base       import BaseTree, Node
 from .reporting  import TreeReporter
-from ._utils.criteria import _get_sizes, _variance, _y_stats
-from ._utils.utils    import _contingency_matrix
+from ._utils.criteria import _impurity, _variance, _y_stats
+from ._utils.coding   import encode, encode_frame, non_constant, present
 from ._tree.split     import score_predictability_weighted, _split
 from ._backend._pitree import gpi_weighted as _c_gpi_weighted
+
+
+#: Margin of the FAST early stop (see the FAST parameter).
+_FAST_MARGIN = 1e-12
 
 
 class PredictabilityTreeWeighted(BaseTree):
@@ -58,7 +62,12 @@ class PredictabilityTreeWeighted(BaseTree):
     feats_viewed : int, default 10
         Top-GPI features evaluated per node.
     FAST : bool, default True
-        Stop feature loop early when ``best_ppi > next_gpi``.
+        Stop the loop over the candidate predictors as soon as the best PI
+        found exceeds the GPI of the next predictor.  Since PI <= GPI for
+        every split of a predictor (the split coarsens its categories) and
+        the predictors are visited by decreasing GPI, no later predictor can
+        win: the tree is the same as with FAST=False, only faster.  A margin
+        of 1e-12 keeps the guarantee against rounding in the last digit.
 
     Attributes (set after fit)
     --------------------------
@@ -155,7 +164,12 @@ class PredictabilityTreeWeighted(BaseTree):
         self.root_N  = len(y)
         self.reporter = TreeReporter(decimals=4)
 
-        self.root = self._grow_tree(X, y, sample_weight)
+        self._begin_fit(X, y)
+        self._w = sample_weight
+        try:
+            self.root = self._grow_tree(np.arange(len(y)), np.arange(X.shape[1]))
+        finally:
+            self._end_fit()
         self._calculate_tree_partial_impurity_reduction()
         return self
 
@@ -167,21 +181,54 @@ class PredictabilityTreeWeighted(BaseTree):
                          for i in range(len(X))])
 
     # ================================================================
+    #  PRIVATE — data coded once per fit (see _utils.coding)
+    # ================================================================
+
+    def _begin_fit(self, X, y):
+        self._feat_names = list(X.columns)
+        self._C, self._C_sizes = encode_frame(X)
+        self._X_cols = [X.iloc[:, c] for c in range(X.shape[1])]
+        self._y = y if isinstance(y, pd.Series) else pd.Series(y)
+        if self.model == "twoClass":
+            self._yc, self._J = None, None        # re-binarised at every node
+        else:
+            self._yc, self._J = encode(y)
+        self._w = None
+
+    def _end_fit(self):
+        for a in ("_C", "_C_sizes", "_X_cols", "_y", "_yc", "_w"):
+            setattr(self, a, None)
+
+    def _node_y_codes(self, rows, y):
+        """Codes of the (possibly re-binarised) target at the node."""
+        if self._yc is None:
+            return encode(y)
+        return self._yc[rows], self._J
+
+    # ================================================================
     #  PRIVATE — tree growth
     # ================================================================
 
     def _grow_tree(
         self,
-        X: pd.DataFrame,
-        y: pd.Series,
-        sample_weight: np.ndarray,
+        rows: np.ndarray,
+        cols,
         root_impurity: float  = 1.0,
         root_N: int           = 1,
         depth: int            = 0,
         pos: int              = 1,
     ) -> Node:
+        """
+        Grow the subtree of the node holding the observations ``rows``
+        (positions in the data given to ``fit``), with candidate predictors
+        ``cols`` (column indices, in the order the node sees them).
+        """
+        y = self._y.iloc[rows]
+        sample_weight = self._w[rows]
 
-        X = self._drop_constant_columns(X)
+        # constant predictors are dropped (as X.drop did, keeping the order)
+        nonconst = non_constant(self._C[np.ix_(rows, cols)]) if len(cols) else np.zeros(0, bool)
+        cols = [c for c, keep in zip(cols, nonconst) if keep]
 
         # --- twoClass: binarize numeric target locally at this node ---
         # y_original keeps the original numeric values to pass to child nodes,
@@ -190,7 +237,11 @@ class PredictabilityTreeWeighted(BaseTree):
         if self.model == "twoClass":
             y = self._binarize_y(y)
 
-        n_samples, n_feats, n_labels, impurity, distribution = _get_sizes(X, y)
+        n_samples    = len(rows)
+        n_feats      = len(cols)
+        n_labels     = len(np.unique(y))
+        impurity     = _impurity(y)
+        distribution = np.unique(y, return_counts=True)[1] / len(y)
 
         # twoClass: override Gini impurity with variance of the original
         # numeric target (same logic as PredictabilityTree).
@@ -224,11 +275,12 @@ class PredictabilityTreeWeighted(BaseTree):
             return leaf
 
         # --- GPI ranking (weighted) ---
-        gpi_vals, gpi_order = self._gpi_weighted(X, y, sample_weight)
+        yc, J = self._node_y_codes(rows, y)
+        gpi_vals, gpi_order, tables = self._gpi_weighted(rows, cols, yc, J, sample_weight)
 
         # --- best split search (weighted) ---
         best_feature, best_treshold, best_pi, best_gpi = self._find_best_predictor(
-            X, y, sample_weight, gpi_order, gpi_vals
+            tables, gpi_order, gpi_vals
         )
 
         # --- post-split stopping criteria ---
@@ -243,19 +295,17 @@ class PredictabilityTreeWeighted(BaseTree):
             return leaf
 
         # --- split ---
-        threshold_labels = np.unique(X[best_feature])[np.array(best_treshold) > 0]
-        indexL, indexR   = _split(X[best_feature], threshold_labels)
+        c_best = {str(k): v[0] for k, v in tables.items()}[best_feature]
+        x_best = self._X_cols[c_best].iloc[rows]
+        threshold_labels = np.unique(x_best)[np.array(best_treshold) > 0]
+        indexL, indexR   = _split(x_best, threshold_labels)
 
         # Pass y_original to children so each node re-binarizes on its own
         # local distribution (twoClass). For other models y_original == y.
-        left  = self._grow_tree(
-            X.loc[indexL], y_original[indexL], sample_weight[indexL],
-            root_impurity, root_N, depth + 1, 2 * pos,
-        )
-        right = self._grow_tree(
-            X.loc[indexR], y_original[indexR], sample_weight[indexR],
-            root_impurity, root_N, depth + 1, 2 * pos + 1,
-        )
+        left  = self._grow_tree(rows[indexL], cols,
+                                root_impurity, root_N, depth + 1, 2 * pos)
+        right = self._grow_tree(rows[indexR], cols,
+                                root_impurity, root_N, depth + 1, 2 * pos + 1)
 
         node = Node(
             gpi=best_gpi, pi=best_pi, position=pos,
@@ -276,38 +326,36 @@ class PredictabilityTreeWeighted(BaseTree):
     #  PRIVATE — weighted GPI and best predictor search
     # ================================================================
 
-    def _gpi_weighted(
-        self,
-        X: pd.DataFrame,
-        y: pd.Series,
-        sample_weight: np.ndarray,
-    ):
+    def _gpi_weighted(self, rows, cols, yc, J, sample_weight):
         """
-        Compute weighted GPI for every column and return descending order.
+        Weighted GPI of every candidate column, in descending order (ties by
+        name), with its weighted table built once per (node, predictor).
 
         Returns
         -------
         gpi_vals  : tuple of floats, sorted descending
         gpi_order : tuple of column names, in the same order
+        tables    : dict name -> (column index, F_weighted, W_row)
         """
-        vals  = []
-        names = []
-        for col in X.columns:
-            F, W_row = self._contingency_matrix_weighted(X[col], y, sample_weight)
-            I, J     = F.shape
-            vals.append(_c_gpi_weighted(I, J, W_row, F.ravel().astype(np.float64)))
-            names.append(col)
+        vals, names, tables = [], [], {}
+        for c in cols:
+            F, W_row = self._contingency_matrix_weighted(
+                self._C[rows, c], self._C_sizes[c], yc, J, sample_weight)
+            I, Jn = F.shape
+            vals.append(_c_gpi_weighted(I, Jn, W_row, F.ravel().astype(np.float64)))
+            names.append(self._feat_names[c])
+            tables[self._feat_names[c]] = (c, F, W_row)
 
         vals, names = zip(*sorted(zip(vals, names), reverse=True))
-        return vals, names
+        return vals, names, tables
 
-    def _find_best_predictor(self, X, y, sample_weight, gpi_order, gpi_vals):
+    def _find_best_predictor(self, tables, gpi_order, gpi_vals):
         best = {"feature": None, "threshold": None, "pi": -np.inf, "gpi": -np.inf}
 
         n_to_view = self._resolve_feats_viewed(len(gpi_order))
 
         for rank, col in enumerate(gpi_order[:n_to_view]):
-            F, W_row = self._contingency_matrix_weighted(X[col], y, sample_weight)
+            _, F, W_row = tables[col]
             pi, S    = score_predictability_weighted(F, W_row, self.model)
 
             if pi > best["pi"]:
@@ -318,19 +366,20 @@ class PredictabilityTreeWeighted(BaseTree):
 
             if (self.FAST
                     and rank < len(gpi_order) - 1
-                    and best["pi"] > gpi_vals[rank + 1]):
+                    and best["pi"] > gpi_vals[rank + 1] + _FAST_MARGIN):
                 break
 
         return best["feature"], best["threshold"], best["pi"], best["gpi"]
 
-    def _contingency_matrix_weighted(
-        self,
-        x: pd.Series,
-        y: pd.Series,
-        sample_weight: np.ndarray,
-    ):
+    @staticmethod
+    def _contingency_matrix_weighted(xc, Ix, yc, J, sample_weight):
         """
-        Build a weighted joint frequency matrix and row-weight vector.
+        Weighted joint frequency matrix and row-weight vector, from the codes
+        of predictor and target at the node.
+
+        Every cell is the sum of the weights of its observations taken in
+        data order, exactly as the earlier mask-per-cell version on the
+        original values computed it, so the result is identical.
 
         Returns
         -------
@@ -339,16 +388,13 @@ class PredictabilityTreeWeighted(BaseTree):
         W_row : np.ndarray, shape (I,)
             Marginal weight for each predictor modality.
         """
-        modalities_x = sorted(x.unique())
-        modalities_y = sorted(y.unique())
-        I = len(modalities_x)
-        J = len(modalities_y)
-
-        F_weighted = np.zeros((I, J), dtype=np.float64)
-        for i, mod_x in enumerate(modalities_x):
-            for j, mod_y in enumerate(modalities_y):
-                mask = (x == mod_x) & (y == mod_y)
-                F_weighted[i, j] = sample_weight[mask].sum()
+        x_levels = np.flatnonzero(present(xc, Ix))
+        y_levels = np.flatnonzero(present(yc, J))
+        F_weighted = np.zeros((len(x_levels), len(y_levels)), dtype=np.float64)
+        for i, a in enumerate(x_levels):
+            in_x = xc == a
+            for j, b in enumerate(y_levels):
+                F_weighted[i, j] = sample_weight[in_x & (yc == b)].sum()
 
         total = F_weighted.sum()
         if total > 0:

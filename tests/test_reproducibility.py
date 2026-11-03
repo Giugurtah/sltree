@@ -183,9 +183,9 @@ def test_slbt_does_not_disturb_categorizer(X_small, y_small, strata_small, numer
 
 def test_seeds_are_drawn_deterministically(X_small, y_small, strata_small):
     """score_slbt runs once per candidate feature at every node, each with its
-    own seed drawn from the estimator's generator.  Fitting twice must consume
-    that generator identically, or the trees would diverge deeper down even
-    though the root agreed.
+    own seed, fixed by (random_state, node, feature).  Fitting twice must give
+    the same seeds, or the trees would diverge deeper down even though the
+    root agreed.
     """
     a = SLBT(max_depth=4, feats_viewed=3, random_state=42)
     b = SLBT(max_depth=4, feats_viewed=3, random_state=42)

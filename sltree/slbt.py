@@ -27,8 +27,9 @@ import pandas as pd
 
 from .base       import BaseTree, Node
 from .reporting  import TreeReporter
-from ._utils.criteria import _gpi_stratified, _get_sizes
-from ._utils.utils    import _stratified_contingency
+from ._utils.utils    import _row_conditional
+from ._utils.coding   import non_constant, NodeCodes
+from ._tree._coded    import CodedSLBTMixin, resolve_n_jobs
 from ._tree.split     import score_slbt, _split, _splitS
 from ._tree._homogeneity.base import get_homogeneity_strategy
 from ._tree._stratified import (
@@ -36,7 +37,11 @@ from ._tree._stratified import (
 )
 
 
-class SLBT(BaseTree):
+#: Margin of the FAST early stop (see the FAST parameter).
+_FAST_MARGIN = 1e-12
+
+
+class SLBT(CodedSLBTMixin, BaseTree):
     """
     Simultaneous Latent Budget Tree for stratified categorical data.
 
@@ -56,13 +61,17 @@ class SLBT(BaseTree):
         Maximum tree depth.
     feats_viewed : int, default 10
         Top-GPI features evaluated per node.
-    FAST : bool, default False
-        Stop feature loop early when ``best_ppi > next_gpi``.
+    FAST : bool, default True
+        Stop the loop over the candidate predictors as soon as the best PI
+        found exceeds the GPI of the next predictor.  Since PI <= GPI for
+        every split of a predictor (the split coarsens its categories) and
+        the predictors are visited by decreasing GPI, no later predictor can
+        win: the tree is the same as with FAST=False, only faster.  A margin
+        of 1e-12 keeps the guarantee against rounding in the last digit.
     n_init : int, default 1
         Random starts of the least-squares SLBM fit at every candidate
-        split; the start with the lowest loss is kept.  With 1 the fit starts
-        from the same matrices as earlier versions.  Values of 5-10 make the
-        split far less dependent on the random start.
+        split; the start with the lowest loss is kept.  Values of 5-10 make
+        the split far less dependent on the random start.
     ls_weights : {"budget", "frequency"}, default "budget"
         Row weighting of the least-squares fit.  "budget": every observed
         (stratum, category) budget weighs the same (behaviour of earlier
@@ -85,6 +94,18 @@ class SLBT(BaseTree):
         Which start is kept when ``n_init`` > 1: the lowest loss ("loss"),
         or, among the starts with the same lowest loss, the split with the
         largest PI ("pi").  See ``_tree.split.score_slbt``.
+    n_jobs : int or None, default 1
+        Threads running the ``n_init`` starts of each least-squares fit in
+        parallel (the C fit releases the GIL); -1 uses every core.  Useful
+        with ``n_init`` > 1 only.  The starts are the same as with one
+        thread, so the tree is identical for every value of ``n_jobs``.
+        Keep 1 when several fits already run in parallel processes.
+    random_state : int, Generator or None, default None
+        Seed of the fit.  The starting matrices of the least-squares fit of
+        predictor c at node t are drawn from a seed fixed by
+        (random_state, t, c), so the tree does not depend on ``FAST``,
+        ``n_jobs`` or the order in which candidates are evaluated, and a
+        second call of ``fit`` on the same data grows the same tree.
 
     Attributes (set after fit)
     --------------------------
@@ -106,7 +127,7 @@ class SLBT(BaseTree):
         min_samples_split: int = 1,
         max_depth: int         = 100,
         feats_viewed: int      = 10,
-        FAST: bool             = False,
+        FAST: bool             = True,
         node_max_features: int | None = None,
         rng                    = None,
         random_state: int | None = None,
@@ -117,6 +138,7 @@ class SLBT(BaseTree):
         als_tol: float         = 1e-12,
         optimizer: str         = "softmax",
         tie_break: str         = "loss",
+        n_jobs: int | None     = 1,
     ):
         super().__init__(
             min_ppi=min_ppi, min_gpi=min_gpi,
@@ -154,24 +176,10 @@ class SLBT(BaseTree):
         if tie_break not in ("loss", "pi"):
             raise ValueError("tie_break must be 'loss' or 'pi'.")
         self.tie_break         = tie_break
+        resolve_n_jobs(n_jobs)                 # validates
+        self.n_jobs            = n_jobs
         self.strata_           = None
 
-
-    def _next_als_seed(self) -> int:
-        """
-        Draw the next seed for the ALS initialisation.
-
-        ``score_slbt`` runs once per candidate feature at every node, so a
-        single fixed seed would start every one of them from the same matrices.
-        A generator seeded once per fit yields a different seed per call while
-        keeping the whole fit reproducible.
-
-        Precedence: an ``rng`` supplied from outside (the ensembles pass one)
-        wins over ``random_state``, so the ensemble's seed governs its trees.
-        """
-        if self._rng is None:
-            self._rng = np.random.default_rng(self.random_state)
-        return int(self._rng.integers(0, 2 ** 63))
 
     def get_params(self, deep: bool = True) -> dict:
         """
@@ -198,6 +206,7 @@ class SLBT(BaseTree):
         p["als_tol"]      = self.als_tol
         p["optimizer"]    = self.optimizer
         p["tie_break"]    = self.tie_break
+        p["n_jobs"]       = self.n_jobs
         p.pop("model", None)
         return p
 
@@ -249,7 +258,13 @@ class SLBT(BaseTree):
         self.reporter = TreeReporter(homogeneity=self.homogeneity, decimals=4)
         self.convergence_ = []
 
-        self.root = self._grow_tree(strategy, X, y, x_s)
+        self._begin_fit(X, y, x_s)
+        try:
+            self.root = self._grow_tree(
+                strategy, np.arange(len(y)), np.arange(X.shape[1]),
+            )
+        finally:
+            self._end_fit()
         self._calculate_tree_partial_impurity_reduction()
         return self
 
@@ -403,17 +418,33 @@ class SLBT(BaseTree):
     def _grow_tree(
         self,
         strategy,
-        X: pd.DataFrame,
-        y: pd.Series,
-        x_s: np.ndarray,
+        rows: np.ndarray,
+        cols,
         root_impurity: float  = 1.0,
         root_N: int           = 1,
         depth: int            = 0,
         pos: int              = 1,
     ) -> Node:
+        """
+        Grow the subtree of the node holding the observations ``rows``
+        (positions in the data given to ``fit``), with candidate predictors
+        ``cols`` (column indices, in the order the node sees them).
+        """
+        y   = self._y.iloc[rows]
+        x_s = self._xs[rows]
+        yc  = self._yc[rows]
 
-        X = self._drop_constant_columns(X)
-        n_samples, n_feats, n_labels, impurity, distribution = _get_sizes(X, y)
+        # constant predictors are dropped (as X.drop did, keeping the order)
+        nonconst = non_constant(self._C[np.ix_(rows, cols)]) if len(cols) else np.zeros(0, bool)
+        cols = [c for c, keep in zip(cols, nonconst) if keep]
+
+        counts = np.bincount(yc, minlength=self._J)
+        counts = counts[counts > 0]
+        n_samples    = len(rows)
+        n_feats      = len(cols)
+        n_labels     = len(counts)
+        distribution = counts / n_samples
+        impurity     = float(1.0 - np.sum(distribution ** 2))
 
         if root_N == 1:
             root_N        = len(y)
@@ -439,17 +470,21 @@ class SLBT(BaseTree):
             return leaf
 
         # --- per-node random feature subsampling (true RF mode) ---
-        if self.node_max_features is not None and self._rng is not None:
-            n = min(self.node_max_features, X.shape[1])
-            sampled_cols = self._rng.choice(X.columns.tolist(), size=n, replace=False)
-            X = X[sampled_cols]
+        # As before, the children only see the predictors sampled here.
+        if self.node_max_features is not None and self._sub_rng is not None:
+            n = min(self.node_max_features, len(cols))
+            by_name = {self._feat_names[c]: c for c in cols}
+            sampled = self._sub_rng.choice([self._feat_names[c] for c in cols],
+                                       size=n, replace=False)
+            cols = [by_name[name] for name in sampled]
 
-        # --- stratified GPI ranking ---
-        gpi_vals, gpi_order = _gpi_stratified(X, y, x_s)
+        # --- stratified GPI ranking (one table per predictor) ---
+        nc = NodeCodes(yc, self._J, self._sc[rows], self._G)
+        gpi_vals, gpi_order, tables = self._node_tables(rows, cols, nc)
 
         # --- best split search ---
         best_feature, best_treshold, best_pi, best_gpi, best_alpha, best_beta, best_diag = (
-            self._find_best_predictor(X, y, x_s, gpi_order, gpi_vals)
+            self._find_best_predictor(tables, gpi_order, gpi_vals, pos)
         )
 
         # --- post-split stopping criteria ---
@@ -463,10 +498,12 @@ class SLBT(BaseTree):
             return leaf
 
         # --- threshold values and split ---
-        x_vals    = np.unique(X[best_feature])
+        c_best    = {str(k): v[0] for k, v in tables.items()}[best_feature]
+        x_best    = self._X_cols[c_best].iloc[rows]
+        x_vals    = np.unique(x_best)
         thresholds = strategy.get_treshold_values(best_treshold, x_vals, x_s)
 
-        indexL, indexR = strategy.split(X[best_feature], x_s, thresholds)
+        indexL, indexR = strategy.split(x_best, x_s, thresholds)
 
         # --- LIFT values (Eq. 4, prior = class distribution of each stratum) ---
         lift1, lift2 = strategy.compute_lift(best_beta, node_strat_dist)
@@ -474,11 +511,11 @@ class SLBT(BaseTree):
             self.convergence_.append({"node": pos, "feature": best_feature, **best_diag})
 
         left  = self._grow_tree(
-            strategy, X.loc[indexL], y[indexL], x_s[indexL],
+            strategy, rows[indexL], cols,
             root_impurity, root_N, depth + 1, 2 * pos,
         )
         right = self._grow_tree(
-            strategy, X.loc[indexR], y[indexR], x_s[indexR],
+            strategy, rows[indexR], cols,
             root_impurity, root_N, depth + 1, 2 * pos + 1,
         )
 
@@ -494,7 +531,7 @@ class SLBT(BaseTree):
             GCR=None,
             strat_labels=node_strata,
             strat_distribution=node_strat_dist,
-            seen=seen_modalities(X[best_feature], x_s),
+            seen=seen_modalities(x_best, x_s),
             als_diag=best_diag,
         )
         if self.reporter is not None:
@@ -505,7 +542,7 @@ class SLBT(BaseTree):
     #  PRIVATE — best predictor search
     # ================================================================
 
-    def _find_best_predictor(self, X, y, x_s, gpi_order, gpi_vals):
+    def _find_best_predictor(self, tables, gpi_order, gpi_vals, pos):
         best = {
             "feature":   None,
             "threshold": None,
@@ -517,14 +554,15 @@ class SLBT(BaseTree):
         }
 
         for rank, col in enumerate(gpi_order[: self.feats_viewed]):
-            Fs_noN = _stratified_contingency(X[col], y, x_s, norm=False)
-            Fs     = _stratified_contingency(X[col], y, x_s, norm=True)
+            c, Fs_noN = tables[col]
+            Fs        = _row_conditional(Fs_noN)
 
             pi, S, alpha, beta, diag = score_slbt(
-                Fs_noN, Fs, self.homogeneity, self._next_als_seed(),
+                Fs_noN, Fs, self.homogeneity, self._als_seed(pos, c),
                 n_init=self.n_init, ls_weights=self.ls_weights,
                 max_iter=self.als_max_iter, tol=self.als_tol,
                 optimizer=self.optimizer, tie_break=self.tie_break,
+                executor=self._executor,
             )
 
             if pi > best["pi"]:
@@ -538,7 +576,7 @@ class SLBT(BaseTree):
 
             if (self.FAST
                     and rank < len(gpi_order) - 1
-                    and best["pi"] > gpi_vals[rank + 1]):
+                    and best["pi"] > gpi_vals[rank + 1] + _FAST_MARGIN):
                 break
 
         return (

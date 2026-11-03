@@ -429,7 +429,9 @@ def test_tie_break_pi_keeps_the_most_predictive_of_the_optimal_splits():
 
     pi, S, _, _, diag = score_slbt(joint, budgets, "none", seed=3, n_init=40,
                                    tie_break="pi", **kw)
-    seeds = [3] + [int(v) for v in np.random.default_rng(3).integers(0, 2 ** 63, size=39)]
+    from sltree._tree.split import start_seeds
+    K, I, J = joint.shape
+    seeds = start_seeds(3, 40, K, K, I, J)          # the 40 starts of the call above
     runs = [score_slbt(joint, budgets, "none", seed=s, n_init=1, **kw) for s in seeds]
     best = min(r[4]["loss"] for r in runs)
     best_pi = max(r[0] for r in runs if r[4]["loss"] <= best + 1e-7 * (1 + best))

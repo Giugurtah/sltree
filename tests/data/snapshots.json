@@ -2,7 +2,7 @@
   "_meta": {
     "data": "fixed seeds, see the generator in test_cross_platform.py",
     "note": "Generated once on Linux/gcc. These values must be identical on macOS and Windows: see tests/test_cross_platform.py.",
-    "note_slbt_none": "Regenerated on Linux/gcc on 2026-10-14 after the revision of the SLBT split: PI is now tau_{Y|s,Z} on the split table, components are aligned across strata in the unconstrained model, and the least-squares fit uses monotone descent with a relative tolerance. The predictability_tree and kmeans snapshots are unchanged."
+    "note_slbt_none": "Regenerated on Linux/gcc on 2026-10-14 after the revision of the SLBT split: PI is now tau_{Y|s,Z} on the split table, components are aligned across strata in the unconstrained model, and the least-squares fit uses monotone descent with a relative tolerance. The predictability_tree and kmeans snapshots are unchanged. Regenerated again on 2026-11-03: the seed of each least-squares fit is now fixed by (random_state, node, predictor) instead of drawn from a sequential stream."
   },
   "kmeans_labels": {
     "0": [
@@ -657,24 +657,24 @@
       "N": 31,
       "impurity": 0.312174817898,
       "impurity_decrease": 0.918994815668,
-      "pi": 0.398190045249,
+      "pi": 0.338800904977,
       "gpi": 0.43778280543
     },
     {
       "position": 26,
       "feature": null,
-      "N": 11,
-      "impurity": 0.495867768595,
-      "impurity_decrease": 0.954342532468,
+      "N": 22,
+      "impurity": 0.086776859504,
+      "impurity_decrease": 0.984019886364,
       "pi": null,
       "gpi": null
     },
     {
       "position": 27,
       "feature": null,
-      "N": 20,
-      "impurity": 0.0,
-      "impurity_decrease": 1.0,
+      "N": 9,
+      "impurity": 0.493827160494,
+      "impurity_decrease": 0.962797619048,
       "pi": null,
       "gpi": null
     },
