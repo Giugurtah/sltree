@@ -128,3 +128,31 @@ def row_conditional_counts(C: np.ndarray) -> np.ndarray:
         F = C / row
     F[np.broadcast_to(row == 0, F.shape)] = 0.0
     return F.astype(np.float64)
+
+
+def conditional_gini(yc: np.ndarray, J: int, sc: np.ndarray | None = None,
+                     G: int = 1, w: np.ndarray | None = None) -> float:
+    """
+    Gini impurity of the target within the strata,
+
+        i_{Y|Z} = sum_g p(g) (1 - sum_j p(j | g)^2),
+
+    with p from counts, or from the weights ``w`` when given.  Without strata
+    (``sc`` None) it is the ordinary Gini impurity.
+    """
+    if len(yc) == 0:
+        return 0.0
+    if sc is None:
+        sc = np.zeros(len(yc), dtype=np.intp)
+        G = 1
+    T = np.bincount(sc * J + yc, weights=w, minlength=G * J).astype(np.float64).reshape(G, J)
+    tot_g = T.sum(axis=1)
+    total = tot_g.sum()
+    if total <= 0:
+        return 0.0
+    out = 0.0
+    for g in range(G):
+        if tot_g[g] > 0:
+            p = T[g] / tot_g[g]
+            out += tot_g[g] / total * (1.0 - float(np.sum(p ** 2)))
+    return out

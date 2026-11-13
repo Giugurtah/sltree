@@ -55,6 +55,17 @@ def _compute_offsets_for_position(pos: int, depth: int) -> Tuple[float, float]:
     return l_c, r_c
 
 
+def _height(node) -> float:
+    """
+    Height of the node on the visual-pruning canvas: V(t) of Eq. 6 made
+    non-decreasing along each path (see ``_tree._visual_pruning``), so that
+    a child is never drawn above its parent.  Falls back to V(t) for a tree
+    whose heights have not been computed.
+    """
+    h = getattr(node, "vp_height", None)
+    return float(node.impurity_decrease if h is None else h)
+
+
 def compute_tree_layout(root: Node):
     """Return (max_depth, max_lc, max_rc, max_impurity_decrease)."""
     if root is None:
@@ -72,8 +83,8 @@ def compute_tree_layout(root: Node):
             continue
         if d > max_depth:
             max_depth = d
-        if float(node.impurity_decrease) > max_imp:
-            max_imp = node.impurity_decrease
+        if _height(node) > max_imp:
+            max_imp = _height(node)
         lc_node, rc_node = _compute_offsets_for_position(node.position, d)
         if lc_node > max_lc: max_lc = lc_node
         if rc_node > max_rc: max_rc = rc_node
@@ -151,7 +162,7 @@ def _recurse_vp(node: Node):
             "value":                           str(_custom_round(node.value, 2)) if isinstance(node.value, float) else str(node.value),
             "impurity":                        float(node.impurity),
             "labels":                          int(node.N),
-            "impurity_decrement":              float(node.impurity_decrease),
+            "impurity_decrement":              _height(node),
             "tree_partial_impurity_reduction": float(node.tree_partial_impurity_reduction),
             "labArray":                        node.labels.tolist(),
             "gcr":                             gcr,
@@ -172,7 +183,7 @@ def _recurse_vp(node: Node):
         "gpi":                             float(node.gpi),
         "pi":                              float(node.pi),
         "impurity":                        float(node.impurity),
-        "impurity_decrement":              float(node.impurity_decrease),
+        "impurity_decrement":              _height(node),
         "tree_partial_impurity_reduction": float(node.tree_partial_impurity_reduction),
         "labels":                          int(node.N),
         "labArray":                        node.labels.tolist(),
@@ -870,7 +881,7 @@ def plot_html(
     plot_data = {
         "l_c":              l_c,
         "r_c":              r_c,
-        "max_imp_decrease": max_imp,
+        "max_imp_decrease": max_imp if max_imp > 0 else 1.0,
         "colors":           color_palette,
         "labels":           model.root.labels.tolist(),
         "is_twoclass":      is_twoclass,

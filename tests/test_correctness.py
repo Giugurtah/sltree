@@ -118,16 +118,16 @@ def test_impurity_decrease_is_zero_at_the_root(X, y):
 
 
 def test_impurity_decrease_matches_its_definition(X, y):
-    """Recomputed from impurity and N, node by node: V_z = 1 - I_z/I_root."""
+    """Eq. 6 of the SLBT paper, recomputed node by node: V(t) = 1 - I_t/I_root."""
     tree = PredictabilityTree(max_depth=5, feats_viewed=3)
     tree.fit(X, y)
 
-    I_root = tree.root.impurity * tree.root.N
+    I_root = tree.root.impurity
 
     def walk(node):
         if node is None:
             return
-        expected = 1.0 - (node.impurity * node.N) / I_root
+        expected = 1.0 - node.impurity / I_root
         assert node.impurity_decrease == pytest.approx(expected, abs=1e-12), \
             f"node {node.position}"
         walk(node.left)
@@ -150,18 +150,19 @@ def test_tree_impurity_proportional_reduction_lies_in_the_unit_interval(X, y):
     assert 0.0 <= V <= 1.0
 
 
-def test_impurity_decrease_grows_away_from_the_root(X, y):
-    """A child always sits higher on the DTG than its parent.
+def test_canvas_height_grows_away_from_the_root(X, y):
+    """A child always sits at least as high on the canvas as its parent.
 
-    This monotonicity is what makes the horizontal cut of the visual pruning
-    meaningful; prune_after_vp relies on it.
+    V(t) itself need not grow (a child can be less pure than its parent);
+    the canvas height h(t) = max(V(t), h(parent)) does, and that is what
+    makes the horizontal cut of the visual pruning meaningful.
     """
     tree = PredictabilityTree(max_depth=5, feats_viewed=3)
     tree.fit(X, y)
 
     for node in _internal(tree.root):
         for child in (node.left, node.right):
-            assert child.impurity_decrease >= node.impurity_decrease - 1e-12, \
+            assert child.vp_height >= node.vp_height, \
                 f"node {node.position} -> {child.position}"
 
 

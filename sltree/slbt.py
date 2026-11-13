@@ -28,7 +28,8 @@ import pandas as pd
 from .base       import BaseTree, Node
 from .reporting  import TreeReporter
 from ._utils.utils    import _row_conditional
-from ._utils.coding   import non_constant, NodeCodes
+from ._utils.coding   import non_constant, NodeCodes, conditional_gini
+from ._tree._visual_pruning import visual_pruning_path, cut_at
 from ._tree._coded    import CodedSLBTMixin, resolve_n_jobs
 from ._tree.split     import score_slbt, _split, _splitS
 from ._tree._homogeneity.base import get_homogeneity_strategy
@@ -78,7 +79,11 @@ class SLBT(CodedSLBTMixin, BaseTree):
         versions).  "frequency": rows weighted by their frequency, i.e.
         Eq. 13 of the SLBT paper.
     epsilon : float, default 0.01
-        Threshold of Eq. 8 for the suggested tree size in visual pruning.
+        Threshold of Eq. 8 for the suggested tree size in visual pruning
+        (``prune_suggested``): the suggested tree stops before the first
+        split, in the visual-pruning sequence, that raises V_Y(T) by at most
+        epsilon; the split of the root included.  V_Y uses the impurity of Y
+        within the strata.  See ``_tree._visual_pruning``.
     als_max_iter : int, default 5000
         Iteration cap per start of the least-squares fit.
     als_tol : float, default 1e-12
@@ -331,15 +336,24 @@ class SLBT(CodedSLBTMixin, BaseTree):
         strata = self._strata_for(X, x_s)
         return [traverse(self.root, X.iloc[i], strata[i]) for i in range(len(X))]
 
-    def prune_suggested(self) -> int | None:
+    def prune_suggested(self, epsilon: float | None = None) -> int | None:
         """
-        Prune at the size suggested by Eq. 8 (threshold ``epsilon``).
+        Prune at the size suggested by Eq. 8.
 
-        Returns the id of the node at which the tree was cut, or None if no
-        node was flagged (nothing pruned).
+        Parameters
+        ----------
+        epsilon : float, optional
+            Threshold of Eq. 8; ``self.epsilon`` when omitted.
+
+        Returns the id of the node at which the tree was cut (1 when only the
+        root is left), or None if every split gains more than epsilon
+        (nothing pruned).
         """
         if self.root is None:
             raise RuntimeError("Tree not fitted. Call fit() first.")
+        if epsilon is not None:
+            self.epsilon = float(epsilon)
+        self._calculate_tree_partial_impurity_reduction()
         nodes = []
         self._collect_nodes(self.root, nodes)
         flagged = [n for n in nodes if n.suggested_pruning]
@@ -353,44 +367,18 @@ class SLBT(CodedSLBTMixin, BaseTree):
         """
         Prune the tree at the node identified by *nodeID*.
 
-        Nodes are expanded in ascending order of ``impurity_decrease`` until
-        *nodeID* is reached; everything still unexpanded at that point is
-        collapsed into a leaf.  Since ``impurity_decrease`` grows away from
-        the root, the nodes that survive are those with a value **below**
-        that of *nodeID*, and those collapsed are the ones with a value
-        greater than or equal to it.
-
-        This is the horizontal cut of the visual-pruning canvas: what lies
-        above the cutting line is pruned away.  ``impurity_decrease`` is the
-        node impurity proportional reduction of Iorio, Aria, D'Ambrosio and
-        Siciliano (2019), equation 3.1 normalised by the root impurity.
+        The internal nodes are expanded in the order of the visual-pruning
+        sequence (increasing canvas height, see ``_tree._visual_pruning``)
+        until *nodeID* is reached; every internal node still unexpanded at
+        that point, *nodeID* included, becomes a leaf.  This is the
+        horizontal cut of the visual-pruning canvas.  With the node flagged
+        by Eq. 8 it gives the suggested tree; with the root it leaves the
+        root alone.
         """
         if self.root is None:
             return
 
-        all_nodes = []
-        self._collect_nodes(self.root, all_nodes)
-        all_nodes.sort(key=lambda n: n.impurity_decrease)
-        self._bubble_sort_nodes(all_nodes)
-
-        virtual_leaves     = [self.root]
-        virtual_leaves_set = {self.root}
-        reached = False
-        i = 0
-
-        while not reached:
-            current = all_nodes[i]
-            if current.position != nodeID:
-                i += 1
-                if current in virtual_leaves_set and not current._is_leaf_node():
-                    virtual_leaves.remove(current)
-                    virtual_leaves_set.discard(current)
-                    virtual_leaves.append(current.left)
-                    virtual_leaves_set.add(current.left)
-                    virtual_leaves.append(current.right)
-                    virtual_leaves_set.add(current.right)
-            else:
-                reached = True
+        virtual_leaves = cut_at(self.root, nodeID)
 
         for node in virtual_leaves:
             if not node._is_leaf_node():
@@ -409,6 +397,7 @@ class SLBT(CodedSLBTMixin, BaseTree):
                 node.GCR       = self._get_gcr(node.distribution, node.labels)
                 node.LCR       = self._get_lcr(node)
 
+        self._calculate_tree_partial_impurity_reduction()
         self._rebuild_report()
 
     # ================================================================
@@ -446,16 +435,17 @@ class SLBT(CodedSLBTMixin, BaseTree):
         distribution = counts / n_samples
         impurity     = float(1.0 - np.sum(distribution ** 2))
 
+        # V_Y(t), Eq. 6, with the impurity of Y within the strata
+        impurity_z = conditional_gini(yc, self._J, self._sc[rows], self._G)
         if root_N == 1:
             root_N        = len(y)
-            root_impurity = impurity
-            impurity_decrease              = 0.0
-            tree_partial_impurity_reduction = 0.0
+            root_impurity = impurity_z
+            impurity_decrease = 0.0
         else:
             impurity_decrease = (
-                (root_impurity - impurity * len(y) / root_N) / root_impurity
+                (root_impurity - impurity_z) / root_impurity if root_impurity > 0 else 0.0
             )
-            tree_partial_impurity_reduction = 0.0
+        tree_partial_impurity_reduction = 0.0
 
         node_strata, node_strat_dist = strat_distribution(y, x_s, np.unique(y))
 
@@ -702,39 +692,9 @@ class SLBT(CodedSLBTMixin, BaseTree):
         return node, cl or cr or changed
 
     def _calculate_tree_partial_impurity_reduction(self):
-        if self.root is None:
-            return
-        all_nodes = []
-        self._collect_nodes(self.root, all_nodes)
-        all_nodes.sort(key=lambda n: n.impurity_decrease)
-        self._bubble_sort_nodes(all_nodes)
-
-        self.root.tree_partial_impurity_reduction = 0.0
-        root_N                = self.root.N
-        previous_part_imp_red = 0.0
-        search                = True
-        virtual_leaves     = [self.root.left, self.root.right]
-        virtual_leaves_set = {self.root.left, self.root.right}
-
-        for current in all_nodes[1:]:
-            part_imp_red = sum(
-                leaf.impurity_decrease * leaf.N / root_N
-                for leaf in virtual_leaves
-            )
-            if part_imp_red - previous_part_imp_red < self.epsilon and search:
-                current.suggested_pruning = True
-                search = False
-            if current in virtual_leaves_set and not current._is_leaf_node():
-                virtual_leaves.remove(current)
-                virtual_leaves_set.discard(current)
-                virtual_leaves.append(current.left)
-                virtual_leaves_set.add(current.left)
-                virtual_leaves.append(current.right)
-                virtual_leaves_set.add(current.right)
-                current.tree_partial_impurity_reduction = part_imp_red
-                previous_part_imp_red = part_imp_red
-            else:
-                current.tree_partial_impurity_reduction = part_imp_red
+        """V_Y(T) along the visual-pruning sequence and the suggested cut
+        (Eqs. 6-8): see ``_tree._visual_pruning``."""
+        visual_pruning_path(self.root, self.epsilon)
 
     @staticmethod
     def _bubble_sort_nodes(nodes):

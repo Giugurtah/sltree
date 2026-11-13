@@ -32,6 +32,7 @@ from ._utils.criteria import _impurity, _variance, _y_stats
 from ._utils.coding   import encode, encode_frame, non_constant, present
 from ._tree.split     import score_predictability_weighted, _split
 from ._backend._pitree import gpi_weighted as _c_gpi_weighted
+from ._tree._visual_pruning import visual_pruning_path
 
 
 #: Margin of the FAST early stop (see the FAST parameter).
@@ -61,6 +62,8 @@ class PredictabilityTreeWeighted(BaseTree):
         Maximum tree depth.
     feats_viewed : int, default 10
         Top-GPI features evaluated per node.
+    epsilon : float, default 0.01
+        Threshold of Eq. 8 for the suggested tree size in visual pruning.
     FAST : bool, default True
         Stop the loop over the candidate predictors as soon as the best PI
         found exceeds the GPI of the next predictor.  Since PI <= GPI for
@@ -87,6 +90,7 @@ class PredictabilityTreeWeighted(BaseTree):
         max_depth: int         = 5,
         feats_viewed: int      = 10,
         FAST: bool             = True,
+        epsilon: float         = 0.01,
     ):
         super().__init__(
             min_ppi=min_ppi, min_gpi=min_gpi,
@@ -100,6 +104,7 @@ class PredictabilityTreeWeighted(BaseTree):
                 "Choose 'twoStage', 'twoing', or 'twoClass'."
             )
         self.model = model
+        self.epsilon = float(epsilon)
 
     def get_params(self, deep: bool = True) -> dict:
         """
@@ -118,6 +123,7 @@ class PredictabilityTreeWeighted(BaseTree):
         """
         p = super().get_params(deep)
         p["model"] = self.model
+        p["epsilon"] = self.epsilon
         p.pop("homogeneity", None)
         return p
 
@@ -258,8 +264,9 @@ class PredictabilityTreeWeighted(BaseTree):
             impurity_decrease              = 0.0
             tree_partial_impurity_reduction = 0.0
         else:
+            # V_Y(t), Eq. 6
             impurity_decrease = (
-                (root_impurity - impurity * len(y) / root_N) / root_impurity
+                (root_impurity - impurity) / root_impurity if root_impurity > 0 else 0.0
             )
             tree_partial_impurity_reduction = 0.0
 
@@ -562,39 +569,9 @@ class PredictabilityTreeWeighted(BaseTree):
         return node, cl or cr or changed
 
     def _calculate_tree_partial_impurity_reduction(self):
-        if self.root is None:
-            return
-        all_nodes = []
-        self._collect_nodes(self.root, all_nodes)
-        all_nodes.sort(key=lambda n: n.impurity_decrease)
-        self._bubble_sort_nodes(all_nodes)
-
-        self.root.tree_partial_impurity_reduction = 0.0
-        root_N                = self.root.N
-        previous_part_imp_red = 0.0
-        search                = True
-        virtual_leaves     = [self.root.left, self.root.right]
-        virtual_leaves_set = {self.root.left, self.root.right}
-
-        for current in all_nodes[1:]:
-            part_imp_red = sum(
-                leaf.impurity_decrease * leaf.N / root_N
-                for leaf in virtual_leaves
-            )
-            if part_imp_red - previous_part_imp_red < 0.01 and search:
-                current.suggested_pruning = True
-                search = False
-            if current in virtual_leaves_set and not current._is_leaf_node():
-                virtual_leaves.remove(current)
-                virtual_leaves_set.discard(current)
-                virtual_leaves.append(current.left)
-                virtual_leaves_set.add(current.left)
-                virtual_leaves.append(current.right)
-                virtual_leaves_set.add(current.right)
-                current.tree_partial_impurity_reduction = part_imp_red
-                previous_part_imp_red = part_imp_red
-            else:
-                current.tree_partial_impurity_reduction = part_imp_red
+        """V_Y(T) along the visual-pruning sequence and the suggested cut
+        (Eqs. 6-8): see ``_tree._visual_pruning``."""
+        visual_pruning_path(self.root, self.epsilon)
 
     @staticmethod
     def _bubble_sort_nodes(nodes):

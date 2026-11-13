@@ -37,7 +37,8 @@ from ._utils.criteria import (
     _distribution_weighted,
 )
 from ._utils.utils  import _row_conditional
-from ._utils.coding import non_constant, NodeCodes
+from ._utils.coding import non_constant, NodeCodes, conditional_gini
+from ._tree._visual_pruning import visual_pruning_path
 from ._tree._coded  import CodedSLBTMixin, resolve_n_jobs
 from ._tree.split   import score_slbt, _split, _splitS
 from ._tree._homogeneity.base import get_homogeneity_strategy
@@ -230,7 +231,12 @@ class SLBTWeighted(CodedSLBTMixin, BaseTree):
         self.reporter = TreeReporter(homogeneity=self.homogeneity, decimals=4)
 
         W_root    = sample_weight.sum()          # 1.0 after normalisation
-        root_imp  = _impurity_weighted(y, sample_weight)
+        _, root_yc = np.unique(np.asarray(y), return_inverse=True)
+        _, root_sc = np.unique(np.asarray(x_s), return_inverse=True)
+        # impurity of Y within the strata at the root (V_Y, Eq. 6)
+        root_imp  = conditional_gini(root_yc.ravel(), int(root_yc.max()) + 1,
+                                     root_sc.ravel(), int(root_sc.max()) + 1,
+                                     sample_weight)
 
         self._begin_fit(X, y, x_s, sample_weight)
         try:
@@ -293,9 +299,10 @@ class SLBTWeighted(CodedSLBTMixin, BaseTree):
         distribution = _distribution_weighted(y, w)
 
         W_node = w.sum()
+        # V_Y(t), Eq. 6, with the weighted impurity of Y within the strata
+        impurity_z = conditional_gini(self._yc[rows], self._J, self._sc[rows], self._G, w)
         impurity_decrease = (
-            (root_impurity - impurity * W_node / W_root) / root_impurity
-            if root_impurity > 0 else 0.0
+            (root_impurity - impurity_z) / root_impurity if root_impurity > 0 else 0.0
         )
 
         node_strata, node_strat_dist = strat_distribution(y, x_s, np.unique(y), w)
@@ -307,6 +314,7 @@ class SLBTWeighted(CodedSLBTMixin, BaseTree):
             impurity_decrease, node_strata, node_strat_dist,
         )
         if leaf is not None:
+            leaf.mass = W_node / W_root
             return leaf
 
         # --- weighted stratified GPI ranking (one table per predictor) ---
@@ -325,6 +333,7 @@ class SLBTWeighted(CodedSLBTMixin, BaseTree):
             impurity_decrease, node_strata, node_strat_dist,
         )
         if leaf is not None:
+            leaf.mass = W_node / W_root
             return leaf
 
         c_best    = {str(k): v[0] for k, v in tables.items()}[best_feature]
@@ -360,6 +369,7 @@ class SLBTWeighted(CodedSLBTMixin, BaseTree):
             seen=seen_modalities(x_best, x_s),
             als_diag=best_diag,
         )
+        node.mass = W_node / W_root
         if self.reporter is not None:
             self.reporter.add_node(node, is_leaf=False)
         return node
@@ -508,39 +518,9 @@ class SLBTWeighted(CodedSLBTMixin, BaseTree):
             self._collect_nodes(node.right, nodes_list)
 
     def _calculate_tree_partial_impurity_reduction(self):
-        if self.root is None:
-            return
-        all_nodes = []
-        self._collect_nodes(self.root, all_nodes)
-        all_nodes.sort(key=lambda n: n.impurity_decrease)
-        _bubble_sort_nodes(all_nodes)
-
-        self.root.tree_partial_impurity_reduction = 0.0
-        root_N                = self.root.N
-        previous_part_imp_red = 0.0
-        search                = True
-        virtual_leaves     = [self.root.left, self.root.right]
-        virtual_leaves_set = {self.root.left, self.root.right}
-
-        for current in all_nodes[1:]:
-            part_imp_red = sum(
-                leaf.impurity_decrease * leaf.N / root_N
-                for leaf in virtual_leaves
-            )
-            if part_imp_red - previous_part_imp_red < self.epsilon and search:
-                current.suggested_pruning = True
-                search = False
-            if current in virtual_leaves_set and not current._is_leaf_node():
-                virtual_leaves.remove(current)
-                virtual_leaves_set.discard(current)
-                virtual_leaves.append(current.left)
-                virtual_leaves_set.add(current.left)
-                virtual_leaves.append(current.right)
-                virtual_leaves_set.add(current.right)
-                current.tree_partial_impurity_reduction = part_imp_red
-                previous_part_imp_red = part_imp_red
-            else:
-                current.tree_partial_impurity_reduction = part_imp_red
+        """V_Y(T) along the visual-pruning sequence and the suggested cut
+        (Eqs. 6-8): see ``_tree._visual_pruning``; p(h) is the weight share."""
+        visual_pruning_path(self.root, self.epsilon)
 
     # ================================================================
     #  REPR
