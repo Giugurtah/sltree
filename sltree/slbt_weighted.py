@@ -42,6 +42,7 @@ from ._tree._visual_pruning import visual_pruning_path
 from ._tree._coded  import CodedSLBTMixin, resolve_n_jobs
 from ._tree.split   import score_slbt, _split, _splitS
 from ._tree._homogeneity.base import get_homogeneity_strategy
+from ._tree._budgets import label_budgets
 from ._tree._stratified import (
     strat_distribution, leaf_lcr, seen_modalities, traverse,
 )
@@ -342,6 +343,10 @@ class SLBTWeighted(CodedSLBTMixin, BaseTree):
         thresholds = strategy.get_treshold_values(best_treshold, x_vals, x_s)
         indexL, indexR = strategy.split(x_best, x_s, thresholds)
         lift1, lift2   = strategy.compute_lift(best_beta, node_strat_dist)
+        F_best = {str(k): v[1] for k, v in tables.items()}[best_feature]
+        alpha_l, beta_l, beta_r = label_budgets(
+            best_alpha, best_beta, F_best, x_vals, node_strata, self.homogeneity,
+        )
         if best_diag is not None:
             self.convergence_.append({"node": pos, "feature": best_feature, **best_diag})
 
@@ -368,6 +373,7 @@ class SLBTWeighted(CodedSLBTMixin, BaseTree):
             strat_distribution=node_strat_dist,
             seen=seen_modalities(x_best, x_s),
             als_diag=best_diag,
+            alpha=alpha_l, beta_left=beta_l, beta_right=beta_r,
         )
         node.mass = W_node / W_root
         if self.reporter is not None:

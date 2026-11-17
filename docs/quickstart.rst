@@ -47,6 +47,21 @@ leave the mixing parameters free and can therefore represent a relationship
 that reverses between strata; ``"A"`` and ``"AB"`` impose one direction on all
 of them.
 
+The fitted model of each split is kept on the node and in the report:
+
+.. code-block:: python
+
+   rep = tree.reporter.results
+   rep[["id", "feature", "threshold", "alpha", "beta_left", "beta_right"]]
+
+``alpha`` holds, for each modality (and each stratum, with ``"none"`` and
+``"B"``), the mixing parameter of the budget of the left child; the modality
+goes left when it is at least 0.5, and a value near 0.5 marks a modality that
+sits between the two children.  ``beta_left`` and ``beta_right`` are the latent
+budgets of the two children, one value per class (per stratum with ``"none"``
+and ``"A"``); the LIFT values are these divided by the class distribution of
+the stratum.
+
 .. warning::
 
    :meth:`~sltree.SLBT.predict` does not take the stratum.  With ``"none"`` or

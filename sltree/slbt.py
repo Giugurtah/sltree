@@ -33,6 +33,7 @@ from ._tree._visual_pruning import visual_pruning_path, cut_at
 from ._tree._coded    import CodedSLBTMixin, resolve_n_jobs
 from ._tree.split     import score_slbt, _split, _splitS
 from ._tree._homogeneity.base import get_homogeneity_strategy
+from ._tree._budgets import label_budgets
 from ._tree._stratified import (
     strat_distribution, leaf_lcr, seen_modalities, traverse,
 )
@@ -391,6 +392,8 @@ class SLBT(CodedSLBTMixin, BaseTree):
                 node.LIFT_1    = None
                 node.LIFT_2    = None
                 node.als_diag  = None
+                node.alpha     = None
+                node.beta_left = node.beta_right = None
                 node.seen      = None
                 best_idx       = int(np.argmax(node.distribution))
                 node.value     = node.labels[best_idx]
@@ -497,6 +500,11 @@ class SLBT(CodedSLBTMixin, BaseTree):
 
         # --- LIFT values (Eq. 4, prior = class distribution of each stratum) ---
         lift1, lift2 = strategy.compute_lift(best_beta, node_strat_dist)
+        # --- mixing parameters and latent budgets of the split, labelled ---
+        F_best = {str(k): v[1] for k, v in tables.items()}[best_feature]
+        alpha_l, beta_l, beta_r = label_budgets(
+            best_alpha, best_beta, F_best, x_vals, node_strata, self.homogeneity,
+        )
         if best_diag is not None:
             self.convergence_.append({"node": pos, "feature": best_feature, **best_diag})
 
@@ -523,6 +531,7 @@ class SLBT(CodedSLBTMixin, BaseTree):
             strat_distribution=node_strat_dist,
             seen=seen_modalities(x_best, x_s),
             als_diag=best_diag,
+            alpha=alpha_l, beta_left=beta_l, beta_right=beta_r,
         )
         if self.reporter is not None:
             self.reporter.add_node(node, is_leaf=False)
@@ -685,6 +694,7 @@ class SLBT(CodedSLBTMixin, BaseTree):
             node.gpi      = node.pi = node.feature = node.treshold = None
             node.LIFT_1   = None
             node.LIFT_2   = None
+            node.alpha    = node.beta_left = node.beta_right = None
             node.GCR      = self._get_gcr(node.distribution, node.labels)
             node.LCR      = self._get_lcr(node)
             node.left     = node.right = None

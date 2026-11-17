@@ -14,7 +14,8 @@ TreeReporter — collects per-node information during tree growth and
 exposes it as a tidy pandas DataFrame.
 
 Works with both PredictabilityTree (no strat_labels / LIFT) and SLBT (with
-strat_labels and LIFT values).
+strat_labels, LIFT values, and the mixing parameters and latent budgets of
+each split: columns alpha, beta_left, beta_right).
 """
 
 from __future__ import annotations
@@ -47,6 +48,11 @@ class NodeRecord:
     lift_right: Any
     lcr: Any = None          # SLBT leaves: {stratum: [LCR per class]} (Eq. 5)
     als_diag: Any = None     # SLBT internal nodes: convergence of the SLBM fit
+    alpha: Any = None        # SLBT internal nodes: mixing parameter of the left budget,
+                             #   {stratum: {modality: value}} or {modality: value}
+    beta_left: Any = None    # SLBT internal nodes: latent budget of the left child,
+                             #   {stratum: [per class]} or [per class]
+    beta_right: Any = None   # same for the right child
 
 
 class TreeReporter:
@@ -78,7 +84,7 @@ class TreeReporter:
                 "id", "node_type", "feature", "threshold", "N",
                 "impurity", "distribution", "labels",
                 "gpi", "pi", "gcr", "lift_left", "lift_right",
-                "lcr", "als_diag",
+                "lcr", "als_diag", "alpha", "beta_left", "beta_right",
             ])
         return pd.DataFrame(asdict(r) for r in self._records)
 
@@ -124,6 +130,9 @@ class TreeReporter:
             lift_right  = lift_right,
             lcr         = self._extract_lcr(node),
             als_diag    = getattr(node, "als_diag", None),
+            alpha       = self._round_nested(getattr(node, "alpha", None)),
+            beta_left   = self._round_nested(getattr(node, "beta_left", None)),
+            beta_right  = self._round_nested(getattr(node, "beta_right", None)),
         )
         self._records.append(rec)
 

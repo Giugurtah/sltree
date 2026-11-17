@@ -88,6 +88,17 @@ class Node:
     als_diag : dict or None
         Convergence diagnostics of the least-squares SLBM fit that produced
         the split (SLBT internal nodes only).
+    alpha : dict or None
+        Mixing parameters of the split, alpha_{1|i(g)}: for each modality
+        (and stratum, when A is stratum specific) the weight of the budget of
+        the left child; the right one has 1 minus it.  A modality goes left
+        when its value is at least 0.5.  See ``_tree._budgets.label_budgets``
+        (SLBT internal nodes only).
+    beta_left, beta_right : dict, list or None
+        Latent budgets of the left and right child, beta_{j|1} and
+        beta_{j|2}, classes in ``labels`` order (per stratum when B is
+        stratum specific).  LIFT_1 and LIFT_2 are these divided by the class
+        distribution of the stratum (SLBT internal nodes only).
     value : scalar or None
         Predicted class (leaf nodes only).
     """
@@ -117,6 +128,9 @@ class Node:
         strat_distribution=None,
         seen=None,
         als_diag=None,
+        alpha=None,
+        beta_left=None,
+        beta_right=None,
         *,
         value=None,
     ):
@@ -143,6 +157,9 @@ class Node:
         self.strat_distribution              = strat_distribution
         self.seen                            = seen
         self.als_diag                        = als_diag
+        self.alpha                           = alpha
+        self.beta_left                       = beta_left
+        self.beta_right                      = beta_right
         self.value                           = value
 
     def _is_leaf_node(self) -> bool:
